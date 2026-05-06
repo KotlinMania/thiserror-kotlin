@@ -123,8 +123,29 @@ rootProject.extensions.configure<WasmYarnRootEnvSpec>("kotlinWasmYarnSpec") {
 
 rootProject.extensions.configure<YarnRootExtension>("kotlinYarn") {
     resolution("diff", "8.0.3")
+    resolution("**/diff", "8.0.3")
     resolution("serialize-javascript", "7.0.5")
+    resolution("**/serialize-javascript", "7.0.5")
     resolution("webpack", "5.106.2")
+    resolution("**/webpack", "5.106.2")
+    resolution("follow-redirects", "1.16.0")
+    resolution("**/follow-redirects", "1.16.0")
+    resolution("lodash", "4.18.1")
+    resolution("**/lodash", "4.18.1")
+    resolution("ajv", "8.20.0")
+    resolution("**/ajv", "8.20.0")
+    resolution("brace-expansion", "5.0.5")
+    resolution("**/brace-expansion", "5.0.5")
+    resolution("flatted", "3.4.2")
+    resolution("**/flatted", "3.4.2")
+    resolution("minimatch", "10.2.5")
+    resolution("**/minimatch", "10.2.5")
+    resolution("picomatch", "4.0.4")
+    resolution("**/picomatch", "4.0.4")
+    resolution("qs", "6.15.1")
+    resolution("**/qs", "6.15.1")
+    resolution("socket.io-parser", "4.2.6")
+    resolution("**/socket.io-parser", "4.2.6")
 }
 
 
@@ -147,14 +168,14 @@ mavenPublishing {
 
     pom {
         name.set("thiserror-kotlin")
-        description.set("Kotlin Multiplatform port of the Rust crate `thiserror` — Error-derive macro")
+        description.set("Kotlin Multiplatform port of dtolnay/thiserror - derive(Error)")
         inceptionYear.set("2026")
         url.set("https://github.com/KotlinMania/thiserror-kotlin")
 
         licenses {
             license {
-                name.set("Apache-2.0")
-                url.set("https://opensource.org/licenses/Apache-2.0")
+                name.set("MIT")
+                url.set("https://opensource.org/licenses/MIT")
                 distribution.set("repo")
             }
         }
@@ -174,4 +195,18 @@ mavenPublishing {
             developerConnection.set("scm:git:ssh://github.com/KotlinMania/thiserror-kotlin.git")
         }
     }
+}
+
+tasks.register("test") {
+    group = "verification"
+    description =
+        "Runs a portable test suite (macOS + JS + WasmJS). Android and non-host native targets are intentionally excluded."
+
+    val defaultTestTasks = listOf(
+        "macosArm64Test",
+        "jsNodeTest",
+        "wasmJsNodeTest",
+    )
+
+    dependsOn(defaultTestTasks.mapNotNull { taskName -> tasks.findByName(taskName) })
 }
