@@ -136,6 +136,7 @@ kotlin {
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+                implementation("io.github.kotlinmania:anyhow-kotlin:0.1.1")
             }
         }
 
