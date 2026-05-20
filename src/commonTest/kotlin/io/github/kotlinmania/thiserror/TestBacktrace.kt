@@ -6,11 +6,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertSame
 
 class TestBacktrace {
-    private class Inner : Error {
+    private class Inner : StdError {
         override fun toString(): String = "..."
     }
 
-    private data class InnerBacktrace(val backtrace: Backtrace) : Error {
+    private data class InnerBacktrace(val backtrace: Backtrace) : StdError {
         override fun provide(request: Request) {
             request.provideBacktrace(backtrace)
         }
@@ -18,23 +18,23 @@ class TestBacktrace {
         override fun toString(): String = "..."
     }
 
-    private data class PlainBacktrace(val backtrace: Backtrace) : Error {
+    private data class PlainBacktrace(val backtrace: Backtrace) : StdError {
         override fun provide(request: Request) {
             request.provideBacktrace(backtrace)
         }
     }
 
-    private data class ExplicitBacktrace(val backtrace: Backtrace) : Error {
+    private data class ExplicitBacktrace(val backtrace: Backtrace) : StdError {
         override fun provide(request: Request) {
             request.provideBacktrace(backtrace)
         }
     }
 
-    private data class NotBacktrace(val backtrace: NotBacktraceValue) : Error
+    private data class NotBacktrace(val backtrace: NotBacktraceValue) : StdError
 
     private data class NotBacktraceValue(val frames: String)
 
-    private data class OptBacktrace(val backtrace: Backtrace?) : Error {
+    private data class OptBacktrace(val backtrace: Backtrace?) : StdError {
         override fun provide(request: Request) {
             if (backtrace != null) {
                 request.provideBacktrace(backtrace)
@@ -42,14 +42,14 @@ class TestBacktrace {
         }
     }
 
-    private data class ArcBacktrace(val backtrace: Backtrace) : Error {
+    private data class ArcBacktrace(val backtrace: Backtrace) : StdError {
         override fun provide(request: Request) {
             request.provideBacktrace(backtrace)
         }
     }
 
-    private data class BacktraceFrom(val sourceError: Inner, val backtrace: Backtrace) : Error {
-        override fun source(): Error = sourceError
+    private data class BacktraceFrom(val sourceError: Inner, val backtrace: Backtrace) : StdError {
+        override fun source(): StdError = sourceError
 
         override fun provide(request: Request) {
             super.provide(request)
@@ -61,8 +61,8 @@ class TestBacktrace {
         }
     }
 
-    private data class CombinedBacktraceFrom(val sourceError: InnerBacktrace) : Error {
-        override fun source(): Error = sourceError
+    private data class CombinedBacktraceFrom(val sourceError: InnerBacktrace) : StdError {
+        override fun source(): StdError = sourceError
 
         override fun provide(request: Request) {
             sourceError.provide(request)
@@ -74,8 +74,8 @@ class TestBacktrace {
         }
     }
 
-    private data class OptBacktraceFrom(val sourceError: Inner, val backtrace: Backtrace?) : Error {
-        override fun source(): Error = sourceError
+    private data class OptBacktraceFrom(val sourceError: Inner, val backtrace: Backtrace?) : StdError {
+        override fun source(): StdError = sourceError
 
         override fun provide(request: Request) {
             super.provide(request)
@@ -89,8 +89,8 @@ class TestBacktrace {
         }
     }
 
-    private data class ArcBacktraceFrom(val sourceError: Inner, val backtrace: Backtrace) : Error {
-        override fun source(): Error = sourceError
+    private data class ArcBacktraceFrom(val sourceError: Inner, val backtrace: Backtrace) : StdError {
+        override fun source(): StdError = sourceError
 
         override fun provide(request: Request) {
             super.provide(request)
@@ -102,8 +102,8 @@ class TestBacktrace {
         }
     }
 
-    private data class AnyhowBacktrace(val sourceError: Error, val backtrace: Backtrace) : Error {
-        override fun source(): Error = sourceError
+    private data class AnyhowBacktrace(val sourceError: StdError, val backtrace: Backtrace) : StdError {
+        override fun source(): StdError = sourceError
 
         override fun provide(request: Request) {
             super.provide(request)
@@ -111,8 +111,8 @@ class TestBacktrace {
         }
     }
 
-    private data class BoxDynErrorBacktrace(val sourceError: Error) : Error {
-        override fun source(): Error = sourceError
+    private data class BoxDynErrorBacktrace(val sourceError: StdError) : StdError {
+        override fun source(): StdError = sourceError
 
         override fun provide(request: Request) {
             sourceError.provide(request)
@@ -120,7 +120,7 @@ class TestBacktrace {
         }
     }
 
-    private sealed class EnumPlainBacktrace : Error {
+    private sealed class EnumPlainBacktrace : StdError {
         data class Test(val backtrace: Backtrace) : EnumPlainBacktrace() {
             override fun provide(request: Request) {
                 request.provideBacktrace(backtrace)
@@ -128,7 +128,7 @@ class TestBacktrace {
         }
     }
 
-    private sealed class EnumExplicitBacktrace : Error {
+    private sealed class EnumExplicitBacktrace : StdError {
         data class Test(val backtrace: Backtrace) : EnumExplicitBacktrace() {
             override fun provide(request: Request) {
                 request.provideBacktrace(backtrace)
@@ -136,7 +136,7 @@ class TestBacktrace {
         }
     }
 
-    private sealed class EnumOptBacktrace : Error {
+    private sealed class EnumOptBacktrace : StdError {
         data class Test(val backtrace: Backtrace?) : EnumOptBacktrace() {
             override fun provide(request: Request) {
                 if (backtrace != null) {
@@ -146,7 +146,7 @@ class TestBacktrace {
         }
     }
 
-    private sealed class EnumArcBacktrace : Error {
+    private sealed class EnumArcBacktrace : StdError {
         data class Test(val backtrace: Backtrace) : EnumArcBacktrace() {
             override fun provide(request: Request) {
                 request.provideBacktrace(backtrace)
@@ -154,9 +154,9 @@ class TestBacktrace {
         }
     }
 
-    private sealed class EnumBacktraceFrom : Error {
+    private sealed class EnumBacktraceFrom : StdError {
         data class Test(val sourceError: Inner, val backtrace: Backtrace) : EnumBacktraceFrom() {
-            override fun source(): Error = sourceError
+            override fun source(): StdError = sourceError
 
             override fun provide(request: Request) {
                 super.provide(request)
@@ -169,9 +169,9 @@ class TestBacktrace {
         }
     }
 
-    private sealed class EnumCombinedBacktraceFrom : Error {
+    private sealed class EnumCombinedBacktraceFrom : StdError {
         data class Test(val sourceError: InnerBacktrace) : EnumCombinedBacktraceFrom() {
-            override fun source(): Error = sourceError
+            override fun source(): StdError = sourceError
 
             override fun provide(request: Request) {
                 sourceError.provide(request)
@@ -184,9 +184,9 @@ class TestBacktrace {
         }
     }
 
-    private sealed class EnumOptBacktraceFrom : Error {
+    private sealed class EnumOptBacktraceFrom : StdError {
         data class Test(val sourceError: Inner, val backtrace: Backtrace?) : EnumOptBacktraceFrom() {
-            override fun source(): Error = sourceError
+            override fun source(): StdError = sourceError
 
             override fun provide(request: Request) {
                 super.provide(request)
@@ -201,9 +201,9 @@ class TestBacktrace {
         }
     }
 
-    private sealed class EnumArcBacktraceFrom : Error {
+    private sealed class EnumArcBacktraceFrom : StdError {
         data class Test(val sourceError: Inner, val backtrace: Backtrace) : EnumArcBacktraceFrom() {
-            override fun source(): Error = sourceError
+            override fun source(): StdError = sourceError
 
             override fun provide(request: Request) {
                 super.provide(request)
@@ -254,7 +254,7 @@ class TestBacktrace {
         assertEquals(null, requestBacktrace(Inner()))
     }
 
-    private fun requestBacktrace(error: Error): Backtrace? {
+    private fun requestBacktrace(error: StdError): Backtrace? {
         val request = Request()
         error.provide(request)
         return request.backtrace()

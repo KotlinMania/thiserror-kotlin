@@ -11,7 +11,7 @@ class TestDisplay {
 
     @Test
     fun testBraced() {
-        data class BracedError(val msg: String) : Error {
+        data class BracedError(val msg: String) : StdError {
             override fun toString(): String = "braced error: $msg"
         }
 
@@ -20,7 +20,7 @@ class TestDisplay {
 
     @Test
     fun testBracedUnused() {
-        data class BracedUnusedError(val extra: Int) : Error {
+        data class BracedUnusedError(val extra: Int) : StdError {
             override fun toString(): String = "braced error"
         }
 
@@ -29,7 +29,7 @@ class TestDisplay {
 
     @Test
     fun testTuple() {
-        data class TupleError(val value: Int) : Error {
+        data class TupleError(val value: Int) : StdError {
             override fun toString(): String = "tuple error: $value"
         }
 
@@ -38,7 +38,7 @@ class TestDisplay {
 
     @Test
     fun testUnit() {
-        class UnitError : Error {
+        class UnitError : StdError {
             override fun toString(): String = "unit error"
         }
 
@@ -47,13 +47,13 @@ class TestDisplay {
 
     @Test
     fun testEnum() {
-        data class EnumBraced(val id: Int) : Error {
+        data class EnumBraced(val id: Int) : StdError {
             override fun toString(): String = "braced error: $id"
         }
-        data class EnumTuple(val value: Int) : Error {
+        data class EnumTuple(val value: Int) : StdError {
             override fun toString(): String = "tuple error: $value"
         }
-        class EnumUnit : Error {
+        class EnumUnit : StdError {
             override fun toString(): String = "unit error"
         }
 
@@ -64,7 +64,7 @@ class TestDisplay {
 
     @Test
     fun testConstants() {
-        data class ConstantsError(val id: String) : Error {
+        data class ConstantsError(val id: String) : StdError {
             override fun toString(): String = "$MSG: \"$id\" (code $CODE)"
         }
 
@@ -73,10 +73,10 @@ class TestDisplay {
 
     @Test
     fun testInherit() {
-        data class InheritSome(val message: String) : Error {
+        data class InheritSome(val message: String) : StdError {
             override fun toString(): String = message
         }
-        data class InheritOther(val ignored: String) : Error {
+        data class InheritOther(val ignored: String) : StdError {
             override fun toString(): String = "other error"
         }
 
@@ -86,7 +86,7 @@ class TestDisplay {
 
     @Test
     fun testBraceEscape() {
-        class BraceEscapeError : Error {
+        class BraceEscapeError : StdError {
             override fun toString(): String = "fn main() {}"
         }
 
@@ -95,7 +95,7 @@ class TestDisplay {
 
     @Test
     fun testExpr() {
-        class ExprError : Error {
+        class ExprError : StdError {
             override fun toString(): String = "1 + 1 = ${1 + 1}"
         }
 
@@ -104,7 +104,7 @@ class TestDisplay {
 
     @Test
     fun testNested() {
-        data class NestedError(val value: Boolean) : Error {
+        data class NestedError(val value: Boolean) : StdError {
             override fun toString(): String = "!bool = ${!value}"
         }
 
@@ -113,7 +113,7 @@ class TestDisplay {
 
     @Test
     fun testMatch() {
-        data class MatchError(val message: String, val number: Int?) : Error {
+        data class MatchError(val message: String, val number: Int?) : StdError {
             override fun toString(): String {
                 val intro = number?.let { "error occurred with $it" } ?: "there was an empty error"
                 return "$intro: $message"
@@ -126,7 +126,7 @@ class TestDisplay {
 
     @Test
     fun testNestedDisplay() {
-        data class NestedDisplayError(val message: String, val number: Int?) : Error {
+        data class NestedDisplayError(val message: String, val number: Int?) : StdError {
             override fun toString(): String {
                 val intro = number?.let { "error occurred with $it" } ?: "there was an empty error"
                 return "$intro: $message"
@@ -146,7 +146,7 @@ class TestDisplay {
 
     @Test
     fun testMixed() {
-        data class MixedError(val a: Int, val d: Int) : Error {
+        data class MixedError(val a: Int, val d: Int) : StdError {
             override fun toString(): String = "a=$a :: b=1 :: c=2 :: d=3"
         }
 
@@ -155,10 +155,10 @@ class TestDisplay {
 
     @Test
     fun testInts() {
-        data class IntTupleError(val first: Int, val second: Int) : Error {
+        data class IntTupleError(val first: Int, val second: Int) : StdError {
             override fun toString(): String = "error $first"
         }
-        data class IntStructError(val value: Int) : Error {
+        data class IntStructError(val value: Int) : StdError {
             override fun toString(): String = "error ?"
         }
 
@@ -168,7 +168,7 @@ class TestDisplay {
 
     @Test
     fun testTrailingComma() {
-        data class TrailingCommaError(val value: Char) : Error {
+        data class TrailingCommaError(val value: Char) : StdError {
             override fun toString(): String = "error $value"
         }
 
@@ -178,7 +178,7 @@ class TestDisplay {
     @Test
     fun testField() {
         data class Inner(val data: Int)
-        data class FieldError(val inner: Inner) : Error {
+        data class FieldError(val inner: Inner) : StdError {
             override fun toString(): String = inner.data.toString()
         }
 
@@ -188,7 +188,7 @@ class TestDisplay {
     @Test
     fun testNestedTupleField() {
         data class Inner(val value: Int)
-        data class NestedTupleFieldError(val inner: Inner) : Error {
+        data class NestedTupleFieldError(val inner: Inner) : StdError {
             override fun toString(): String = inner.value.toString()
         }
 
@@ -200,7 +200,7 @@ class TestDisplay {
         data class PointerBox(val value: Int) {
             fun pointerString(): String = "ptr($value)"
         }
-        data class PointerError(val field: PointerBox) : Error {
+        data class PointerError(val field: PointerBox) : StdError {
             override fun toString(): String = field.pointerString()
         }
 
@@ -210,10 +210,10 @@ class TestDisplay {
 
     @Test
     fun testMacroRulesVariantFromCallSite() {
-        data class Error0Repro(val value: UByte) : Error {
+        data class Error0Repro(val value: UByte) : StdError {
             override fun toString(): String = value.toString()
         }
-        data class Error1Repro(val value: UByte) : Error {
+        data class Error1Repro(val value: UByte) : StdError {
             override fun toString(): String = value.toString()
         }
 
@@ -223,10 +223,10 @@ class TestDisplay {
 
     @Test
     fun testMacroRulesMessageFromCallSite() {
-        data class MacroUnnamedError(val value: UByte) : Error {
+        data class MacroUnnamedError(val value: UByte) : StdError {
             override fun toString(): String = value.toString()
         }
-        data class MacroNamedError(val x: UByte) : Error {
+        data class MacroNamedError(val x: UByte) : StdError {
             override fun toString(): String = x.toString()
         }
 
@@ -236,7 +236,7 @@ class TestDisplay {
 
     @Test
     fun testRaw() {
-        data class RawError(val functionName: String) : Error {
+        data class RawError(val functionName: String) : StdError {
             override fun toString(): String = "braced raw error: $functionName"
         }
 
@@ -245,7 +245,7 @@ class TestDisplay {
 
     @Test
     fun testRawEnum() {
-        data class RawEnumBracedError(val functionName: String) : Error {
+        data class RawEnumBracedError(val functionName: String) : StdError {
             override fun toString(): String = "braced raw error: $functionName"
         }
 
@@ -254,7 +254,7 @@ class TestDisplay {
 
     @Test
     fun testKeyword() {
-        class KeywordError : Error {
+        class KeywordError : StdError {
             override fun toString(): String = "error: 1"
         }
 
@@ -263,16 +263,16 @@ class TestDisplay {
 
     @Test
     fun testSelf() {
-        class SelfError : Error {
-            override fun toString(): String = "error: Error"
+        class SelfError : StdError {
+            override fun toString(): String = "error: StdError"
         }
 
-        assertDisplay("error: Error", SelfError())
+        assertDisplay("error: StdError", SelfError())
     }
 
     @Test
     fun testStrSpecialChars() {
-        data class SpecialCharsError(private val message: String) : Error {
+        data class SpecialCharsError(private val message: String) : StdError {
             override fun toString(): String = message
         }
 
@@ -288,7 +288,7 @@ class TestDisplay {
 
     @Test
     fun testRawStr() {
-        data class RawStringError(private val message: String) : Error {
+        data class RawStringError(private val message: String) : StdError {
             override fun toString(): String = message
         }
 
@@ -300,25 +300,25 @@ class TestDisplay {
 
     @Test
     fun testFmtPath() {
-        class FmtPathUnit : Error {
+        class FmtPathUnit : StdError {
             override fun toString(): String = unit()
         }
-        data class FmtPathTuple(val key: Int, val value: Int) : Error {
+        data class FmtPathTuple(val key: Int, val value: Int) : StdError {
             override fun toString(): String = pair(key, value)
         }
-        data class FmtPathEntry(val key: Int, val value: Int) : Error {
+        data class FmtPathEntry(val key: Int, val value: Int) : StdError {
             override fun toString(): String = pair(key, value)
         }
-        data class FmtPathI16(val value: Int) : Error {
+        data class FmtPathI16(val value: Int) : StdError {
             override fun toString(): String = octal(value)
         }
-        data class FmtPathI32(val value: Int) : Error {
+        data class FmtPathI32(val value: Int) : StdError {
             override fun toString(): String = octal(value)
         }
-        data class FmtPathI64(val value: Int) : Error {
+        data class FmtPathI64(val value: Int) : StdError {
             override fun toString(): String = value.toString(8)
         }
-        data class FmtPathOther(val value: Boolean) : Error {
+        data class FmtPathOther(val value: Boolean) : StdError {
             override fun toString(): String = "...$value"
         }
 
@@ -333,16 +333,16 @@ class TestDisplay {
 
     @Test
     fun testFmtPathInherited() {
-        data class FmtPathInheritedI16(val value: Int) : Error {
+        data class FmtPathInheritedI16(val value: Int) : StdError {
             override fun toString(): String = octal(value)
         }
-        data class FmtPathInheritedI32(val value: Int) : Error {
+        data class FmtPathInheritedI32(val value: Int) : StdError {
             override fun toString(): String = octal(value)
         }
-        data class FmtPathInheritedI64(val value: Int) : Error {
+        data class FmtPathInheritedI64(val value: Int) : StdError {
             override fun toString(): String = value.toString(8)
         }
-        data class FmtPathInheritedOther(val value: Boolean) : Error {
+        data class FmtPathInheritedOther(val value: Boolean) : StdError {
             override fun toString(): String = "...$value"
         }
 
@@ -352,7 +352,7 @@ class TestDisplay {
         assertDisplay("...false", FmtPathInheritedOther(false))
     }
 
-    private sealed interface VoidError : Error
+    private sealed interface VoidError : StdError
 
     private companion object {
         const val MSG = "failed to do"

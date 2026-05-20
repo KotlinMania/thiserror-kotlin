@@ -5,7 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class TestExpr {
-    private sealed class CompilerError : Error {
+    private sealed class CompilerError : StdError {
         data class TooManyShiftBits(
             val isLeft: Boolean,
             val maximum: ULong,
@@ -48,14 +48,14 @@ class TestExpr {
         val name: String,
         val component: String,
         val suggestion: String?,
-    ) : Error {
+    ) : StdError {
         override fun toString(): String {
             val suffix = suggestion?.let { "; did you mean '$it'?" } ?: ""
             return "toolchain '$name' does not contain component $component$suffix"
         }
     }
 
-    private data class AssociatedTypeError(val value: String) : Error {
+    private data class AssociatedTypeError(val value: String) : StdError {
         override fun toString(): String = "$value 0"
     }
 

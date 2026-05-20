@@ -4,14 +4,14 @@ package io.github.kotlinmania.thiserror
 // Shared Kotlin error surface re-homed from the crate and private helper exports.
 
 /**
- * Kotlin standard error surface used by generated or handwritten thiserror
+ * Kotlin standard-error surface used by generated or handwritten error
  * implementations.
  */
-public interface Error : AsDynError, ThiserrorProvide {
+public interface StdError : AsDynError, ThiserrorProvide {
     /**
      * The lower-level error that caused this error, if any.
      */
-    public fun source(): Error? = null
+    public fun source(): StdError? = null
 
     /**
      * Provides typed members such as a backtrace to the caller's request.
@@ -23,7 +23,7 @@ public interface Error : AsDynError, ThiserrorProvide {
         }
     }
 
-    override fun asDynError(): Error = this
+    override fun asDynError(): StdError = this
 
     override fun thiserrorProvide(request: Request) {
         provide(request)

@@ -4,14 +4,14 @@ Based on AST analysis, here are the concrete next steps.
 
 ## Summary
 
-- **Files Present:** 6/6 (100.0%)
-- **Function parity:** 5/5 matched (target 20) — 100.0%
-- **Class/type parity:** 9/9 matched (target 13) — 100.0%
-- **Combined symbol parity:** 14/14 matched (target 33) — 100.0%
-- **Average inline-code cosine:** 0.45 (function body across 4 matched files)
-- **Average documentation cosine:** 0.00 (doc text across 4 matched files)
+- **Files Present:** 1/11 (9.1%)
+- **Function parity:** 5/78 matched (target 14) — 6.4%
+- **Class/type parity:** 2/20 matched (target 5) — 10.0%
+- **Combined symbol parity:** 7/98 matched (target 19) — 7.1%
+- **Average inline-code cosine:** 0.32 (function body across 1 matched files)
+- **Average documentation cosine:** 0.00 (doc text across 1 matched files)
 - **Cheat-zeroed Files:** 0
-- **Critical Issues:** 5 files with <0.60 function similarity
+- **Critical Issues:** 1 files with <0.60 function similarity
 
 ## Priority 1: Fix Incomplete High-Dependency Files
 
@@ -27,71 +27,19 @@ No missing high-value files detected.
 
 Every matched file is listed below with function and type symbol parity.
 
-### 1. var
+### 1. unraw
 
-- **Target:** `thiserror.Var`
-- **Similarity:** 0.47
-- **Dependents:** 1
-- **Priority Score:** 1000205.2
-- **Functions:** 1/1 matched (target 2)
-- **Missing functions:** _none_
-- **Types:** 1/1 matched
-- **Missing types:** _none_
-
-### 2. display
-
-- **Target:** `thiserror.Display`
-- **Similarity:** 0.38
+- **Target:** `Unraw [PROVENANCE-FALLBACK]`
+- **Similarity:** 0.32
 - **Dependents:** 0
-- **Priority Score:** 606.2
-- **Functions:** 2/2 matched (target 11)
-- **Missing functions:** _none_
-- **Types:** 4/4 matched (target 7)
+- **Priority Score:** 61306.8
+- **Functions:** 5/11 matched (target 14)
+- **Missing functions:** `fmt`, `eq`, `cmp`, `partial_cmp`, `parse`, `hash`
+- **Types:** 2/2 matched (target 5)
 - **Missing types:** _none_
-
-### 3. aserror
-
-- **Target:** `thiserror.Aserror`
-- **Similarity:** 0.05
-- **Dependents:** 0
-- **Priority Score:** 309.5
-- **Functions:** 1/1 matched
-- **Missing functions:** _none_
-- **Types:** 2/2 matched
-- **Missing types:** _none_
-
-### 4. provide
-
-- **Target:** `thiserror.Provide`
-- **Similarity:** 0.91
-- **Dependents:** 0
-- **Priority Score:** 300.9
-- **Functions:** 1/1 matched (target 6)
-- **Missing functions:** _none_
-- **Types:** 2/2 matched (target 3)
-- **Missing types:** _none_
-
-### 5. lib
-
-- **Target:** `thiserror.Lib [STUB]`
-- **Similarity:** 1.00
-- **Dependents:** 0
-- **Priority Score:** 0.0
-- **Functions:** 0/0 matched
-- **Missing functions:** _none_
-- **Types:** 0/0 matched
-- **Missing types:** _none_
-
-### 6. private
-
-- **Target:** `thiserror.Private [STUB]`
-- **Similarity:** 1.00
-- **Dependents:** 0
-- **Priority Score:** 0.0
-- **Functions:** 0/0 matched
-- **Missing functions:** _none_
-- **Types:** 0/0 matched
-- **Missing types:** _none_
+- **Provenance warning:** port-lint provenance header matched only after fallback normalization: `impl/src/unraw.rs` vs expected `unraw.rs`
+- **Proposed provenance header:** `// port-lint: source unraw.rs` (current: `// port-lint: source impl/src/unraw.rs`)
+- **Lint issues:** 1
 
 ## Success Criteria
 
@@ -107,8 +55,20 @@ For each file to be considered "complete":
 ```bash
 # Initialize task queue for systematic porting
 cd tools/ast_distance
-./ast_distance --init-tasks ../../tmp/thiserror/src rust ../../src/commonMain/kotlin/io/github/kotlinmania/thiserror kotlin tasks.json ../../AGENTS.md
+./ast_distance --init-tasks ../../tmp/thiserror/impl/src rust ../../src/commonMain/kotlin/io/github/kotlinmania/thiserror/impl kotlin tasks.json ../../AGENTS.md
 
 # Get next high-priority task
 ./ast_distance --assign tasks.json <agent-id>
 ```
+## Reexport / Wiring Modules
+
+These files match `reexport_modules` patterns in `.ast_distance_config.json`. They are filtered out of
+normal priority and missing-file ladders because they are wiring
+modules, not direct logic ports. Consult them for call-site routing;
+do not treat them as the next implementation target by default.
+
+### Missing
+
+| Source | Expected target | Deps | Source path | Expected path |
+|--------|-----------------|------|-------------|---------------|
+| `lib` | `Lib` | 0 | `lib.rs` | `Lib.kt` |

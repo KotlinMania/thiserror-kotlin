@@ -6,12 +6,12 @@ package io.github.kotlinmania.thiserror
  * through the standard error surface.
  */
 public sealed interface AsDynError {
-    public fun asDynError(): Error
+    public fun asDynError(): StdError
 
     public sealed interface Sealed
 }
 
 /**
- * Adapts an [Error] to the dynamic error surface.
+ * Adapts an [StdError] to the dynamic error surface.
  */
-public fun asDynError(error: Error): Error = error
+public fun asDynError(error: StdError): StdError = error
