@@ -20,21 +20,21 @@ class TestGenerics {
         override fun toString(): String = "debug and display"
     }
 
-    private sealed class EnumDebugGeneric<E> : Error {
+    private sealed class EnumDebugGeneric<E> : StdError {
         data class FatalError<E>(val value: E) : EnumDebugGeneric<E>() {
             override fun toString(): String = value.toString()
         }
     }
 
-    private sealed class EnumFromGeneric<E> : Error {
+    private sealed class EnumFromGeneric<E> : StdError {
         data class Source<E>(val sourceError: EnumDebugGeneric<E>) : EnumFromGeneric<E>() {
-            override fun source(): Error = sourceError
+            override fun source(): StdError = sourceError
 
             override fun toString(): String = "enum from generic"
         }
     }
 
-    private sealed class EnumCompound<HasDisplay, HasDebug, HasNeither> : Error {
+    private sealed class EnumCompound<HasDisplay, HasDebug, HasNeither> : StdError {
         data class DisplayDebug<HasDisplay, HasDebug, HasNeither>(
             val display: HasDisplay,
             val debug: HasDebug,
@@ -57,29 +57,29 @@ class TestGenerics {
         }
     }
 
-    private sealed class EnumTransparentGeneric<E : Error> : Error {
-        data class Other<E : Error>(val inner: E) : EnumTransparentGeneric<E>() {
-            override fun source(): Error? = inner.source()
+    private sealed class EnumTransparentGeneric<E : StdError> : StdError {
+        data class Other<E : StdError>(val inner: E) : EnumTransparentGeneric<E>() {
+            override fun source(): StdError? = inner.source()
 
             override fun toString(): String = inner.toString()
         }
     }
 
-    private data class StructDebugGeneric<E>(val underlying: E) : Error {
+    private data class StructDebugGeneric<E>(val underlying: E) : StdError {
         override fun toString(): String = underlying.toString()
     }
 
-    private data class StructFromGeneric<E>(val sourceError: StructDebugGeneric<E>) : Error {
-        override fun source(): Error = sourceError
+    private data class StructFromGeneric<E>(val sourceError: StructDebugGeneric<E>) : StdError {
+        override fun source(): StdError = sourceError
     }
 
-    private data class StructTransparentGeneric<E : Error>(val inner: E) : Error {
-        override fun source(): Error? = inner.source()
+    private data class StructTransparentGeneric<E : StdError>(val inner: E) : StdError {
+        override fun source(): StdError? = inner.source()
 
         override fun toString(): String = inner.toString()
     }
 
-    private sealed class AssociatedTypeError<T> : Error {
+    private sealed class AssociatedTypeError<T> : StdError {
         class Other<T> : AssociatedTypeError<T>() {
             override fun toString(): String = "couldn't parse matrix"
         }
@@ -105,7 +105,7 @@ class TestGenerics {
 
     @Test
     fun testNoBoundOnNamedFmt() {
-        data class NamedFmtError<T>(val thing: T) : Error {
+        data class NamedFmtError<T>(val thing: T) : StdError {
             override fun toString(): String = "..."
         }
 
@@ -115,7 +115,7 @@ class TestGenerics {
 
     @Test
     fun testMultipleBound() {
-        data class MultipleBoundError(val thing: IntLike) : Error {
+        data class MultipleBoundError(val thing: IntLike) : StdError {
             override fun toString(): String = "0x${thing.hexLower()} 0x${thing.hexUpper()}"
         }
 

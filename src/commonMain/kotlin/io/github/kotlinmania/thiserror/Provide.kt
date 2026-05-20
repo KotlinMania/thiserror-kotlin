@@ -35,6 +35,6 @@ public sealed interface ThiserrorProvide {
 /**
  * Forwards provided members from an error into [Request].
  */
-public fun thiserrorProvide(error: Error, request: Request) {
+public fun thiserrorProvide(error: StdError, request: Request) {
     error.provide(request)
 }

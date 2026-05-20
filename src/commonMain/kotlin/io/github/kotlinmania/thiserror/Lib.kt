@@ -14,7 +14,6 @@ package io.github.kotlinmania.thiserror
  * caller should get the same public shape as if the standard error surface had
  * been written by hand.
  */
+public object Error
 
-// Module wiring is tracked from the upstream crate root. Kotlin keeps the
-// helper declarations in direct package files and does not bridge the macro
-// implementation through aliases.
+public object Thiserror

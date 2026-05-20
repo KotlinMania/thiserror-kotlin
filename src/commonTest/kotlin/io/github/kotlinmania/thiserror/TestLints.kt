@@ -6,19 +6,19 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class TestLints {
-    private data class AnyError(val message: String) : Error {
+    private data class AnyError(val message: String) : StdError {
         override fun toString(): String = message
     }
 
-    private data class MyError(val sourceError: Error? = null) : Error {
-        override fun source(): Error? = sourceError
+    private data class MyError(val sourceError: StdError? = null) : StdError {
+        override fun source(): StdError? = sourceError
 
         override fun toString(): String = "..."
     }
 
-    private sealed class MyLifetimeError : Error {
-        data class A(val sourceError: Error) : MyLifetimeError() {
-            override fun source(): Error = sourceError
+    private sealed class MyLifetimeError : StdError {
+        data class A(val sourceError: StdError) : MyLifetimeError() {
+            override fun source(): StdError = sourceError
 
             override fun toString(): String = "..."
         }
@@ -28,29 +28,29 @@ class TestLints {
         }
     }
 
-    private class DeprecatedStruct : Error {
+    private class DeprecatedStruct : StdError {
         override fun toString(): String = "..."
     }
 
-    private data class DeprecatedStructField(val message: String) : Error {
+    private data class DeprecatedStructField(val message: String) : StdError {
         override fun toString(): String = "$message $message"
     }
 
-    private sealed class DeprecatedEnum : Error {
+    private sealed class DeprecatedEnum : StdError {
         data object Variant : DeprecatedEnum() {
             override fun toString(): String = "..."
         }
     }
 
-    private sealed class DeprecatedVariant : Error {
+    private sealed class DeprecatedVariant : StdError {
         data object Variant : DeprecatedVariant() {
             override fun toString(): String = "..."
         }
     }
 
-    private sealed class DeprecatedFrom : Error {
+    private sealed class DeprecatedFrom : StdError {
         data class Variant(val sourceError: DeprecatedStruct) : DeprecatedFrom() {
-            override fun source(): Error = sourceError
+            override fun source(): StdError = sourceError
 
             override fun toString(): String = sourceError.toString()
         }
