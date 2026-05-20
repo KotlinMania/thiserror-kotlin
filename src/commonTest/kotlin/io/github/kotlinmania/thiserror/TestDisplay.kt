@@ -264,10 +264,10 @@ class TestDisplay {
     @Test
     fun testSelf() {
         class SelfError : StdError {
-            override fun toString(): String = "error: StdError"
+            override fun toString(): String = "error: Error"
         }
 
-        assertDisplay("error: StdError", SelfError())
+        assertDisplay("error: Error", SelfError())
     }
 
     @Test
