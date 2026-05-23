@@ -199,10 +199,18 @@ kotlin {
         binaries.framework { baseName = "Thiserror"; xcf.add(this) }
     }
     iosSimulatorArm64 {
-        binaries.framework { baseName = "Thiserror"; xcf.add(this) }
+        binaries.framework {
+            baseName = "Thiserror"
+            isStatic = true
+            xcf.add(this)
+        }
     }
     iosX64 {
-        binaries.framework { baseName = "Thiserror"; xcf.add(this) }
+        binaries.framework {
+            baseName = "Thiserror"
+            isStatic = true
+            xcf.add(this)
+        }
     }
 
     tvosArm64 {
