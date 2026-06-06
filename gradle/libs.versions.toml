@@ -24,11 +24,17 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "datetime" }
 collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version.ref = "collectionsImmutable" }
 
+proc-macro2-kotlin = { module = "io.github.kotlinmania:proc-macro2-kotlin", version = "0.1.2" }
+quote-kotlin = { module = "io.github.kotlinmania:quote-kotlin", version = "0.1.2" }
+anyhow-kotlin = { module = "io.github.kotlinmania:anyhow-kotlin", version = "0.1.1" }
 [bundles]
 thiserror-kotlin-commonMain = [
-  "kotlinx-coroutines-core",
-  "kotlinx-serialization-core",
-  "kotlinx-serialization-json",
-  "kotlinx-datetime",
-  "collections-immutable",
+    "kotlinx-coroutines-core",
+    "kotlinx-serialization-core",
+    "kotlinx-serialization-json",
+    "kotlinx-datetime",
+    "collections-immutable",
+    "proc-macro2-kotlin",
+    "quote-kotlin",
+    "anyhow-kotlin",
 ]
