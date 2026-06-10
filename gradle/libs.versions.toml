@@ -24,8 +24,8 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "datetime" }
 collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version.ref = "collectionsImmutable" }
 
-proc-macro2-kotlin = { module = "io.github.kotlinmania:proc-macro2-kotlin", version = "0.1.2" }
-quote-kotlin = { module = "io.github.kotlinmania:quote-kotlin", version = "0.1.2" }
+proc-macro2-kotlin = { module = "io.github.kotlinmania:proc-macro2-kotlin", version = "0.1.3" }
+quote-kotlin = { module = "io.github.kotlinmania:quote-kotlin", version = "0.1.3" }
 anyhow-kotlin = { module = "io.github.kotlinmania:anyhow-kotlin", version = "0.1.1" }
 [bundles]
 thiserror-kotlin-commonMain = [
