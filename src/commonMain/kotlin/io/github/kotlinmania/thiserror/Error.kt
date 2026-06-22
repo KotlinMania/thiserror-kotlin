@@ -1,4 +1,3 @@
-// port-lint: ignore
 package io.github.kotlinmania.thiserror
 
 // Shared Kotlin error surface re-homed from the crate and private helper exports.
