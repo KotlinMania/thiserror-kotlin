@@ -8,10 +8,13 @@ import io.github.kotlinmania.syn.GenericArgument
 import io.github.kotlinmania.syn.Generics
 import io.github.kotlinmania.syn.Ident
 import io.github.kotlinmania.syn.PathArguments
-import io.github.kotlinmania.syn.PathSegment
 import io.github.kotlinmania.syn.SynType
+import io.github.kotlinmania.syn.TypeParamBound
+import io.github.kotlinmania.syn.TypeParamBoundList
+import io.github.kotlinmania.syn.TypeParamBoundParse
 import io.github.kotlinmania.syn.WhereClause
 import io.github.kotlinmania.syn.WherePredicate
+import io.github.kotlinmania.syn.parse2
 import io.github.kotlinmania.syn.token.Plus
 
 public class ParamsInScope(generics: Generics) {
@@ -52,7 +55,7 @@ private fun crawl(inScope: ParamsInScope, ty: SynType, onFound: () -> Unit) {
 }
 
 public class InferredBounds {
-    private val bounds: MutableMap<String, Pair<MutableSet<String>, MutableList<TokenStream>>> = mutableMapOf()
+    private val bounds: MutableMap<String, Pair<MutableSet<String>, TypeParamBoundList>> = mutableMapOf()
     private val order: MutableList<TokenStream> = mutableListOf()
 
     public fun insert(ty: ToTokens, bound: ToTokens) {
@@ -62,44 +65,30 @@ public class InferredBounds {
         if (!bounds.containsKey(tyKey)) {
             order.add(tyTokens)
         }
-        val entry: Pair<MutableSet<String>, MutableList<TokenStream>> =
-            bounds.getOrPut(tyKey) { mutableSetOf<String>() to mutableListOf<TokenStream>() }
-        val (set, tokens) = entry
+        val entry: Pair<MutableSet<String>, TypeParamBoundList> =
+            bounds.getOrPut(tyKey) { mutableSetOf<String>() to TypeParamBoundList() }
+        val (set, boundList) = entry
         if (set.add(boundTokens.toString())) {
-            tokens.add(boundTokens)
+            val bound = parse2(TypeParamBoundParse, boundTokens).getOrThrow()
+            boundList.push(bound, Plus::default)
         }
     }
 
     public fun augmentWhereClause(generics: Generics): WhereClause {
-        val whereClause = generics.makeWhereClause()
+        val genericsCopy = generics.copy()
+        val whereClause = genericsCopy.makeWhereClause()
         for (ty in order) {
             val boundsPair = bounds[ty.toString()]
             if (boundsPair != null) {
-                val (set, _) = boundsPair
-                for (boundStr in set) {
-                    val boundType = io.github.kotlinmania.syn.SynType.Verbatim(
-                        io.github.kotlinmania.procmacro2.TokenStream.new(),
-                    )
-                    val tyType = io.github.kotlinmania.syn.SynType.Verbatim(ty)
-                    whereClause.predicates.pushValue(
-                        WherePredicate.TypePredicate(
-                            tyType,
-                            io.github.kotlinmania.syn.token.Colon.default(),
-                            io.github.kotlinmania.syn.TypeParamBoundList().also { bl ->
-                                bl.pushValue(
-                                    io.github.kotlinmania.syn.TypeParamBound.Trait(
-                                        io.github.kotlinmania.syn.Path.from(
-                                            io.github.kotlinmania.procmacro2.Ident.new(boundStr, io.github.kotlinmania.procmacro2.Span.callSite()),
-                                        ),
-                                    ),
-                                )
-                            },
-                        ),
-                    )
-                    if (!whereClause.predicates.emptyOrTrailing()) {
-                        whereClause.predicates.pushPunct(Plus.default())
-                    }
-                }
+                val (_, boundList) = boundsPair
+                whereClause.predicates.push(
+                    WherePredicate.TypePredicate(
+                        SynType.Verbatim(ty),
+                        io.github.kotlinmania.syn.token.Colon.default(),
+                        boundList.copy(),
+                    ),
+                    io.github.kotlinmania.syn.token.Comma::default,
+                )
             }
         }
         return whereClause
