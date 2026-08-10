@@ -2,18 +2,14 @@
 package io.github.kotlinmania.thiserror.impl
 
 import io.github.kotlinmania.procmacro2.Ident
-import io.github.kotlinmania.procmacro2.Literal
 import io.github.kotlinmania.procmacro2.Span
 import io.github.kotlinmania.procmacro2.TokenStream
-import io.github.kotlinmania.procmacro2.TokenTree
 import io.github.kotlinmania.quote.ToTokens
-import io.github.kotlinmania.quote.append
 import io.github.kotlinmania.quote.toTokens
-
-public data class Index(
-    public val index: UInt,
-    public val span: Span,
-)
+import io.github.kotlinmania.syn.IdentParse
+import io.github.kotlinmania.syn.Index
+import io.github.kotlinmania.syn.parseStr
+import io.github.kotlinmania.syn.unraw
 
 public class IdentUnraw(
     private val ident: Ident,
@@ -24,13 +20,14 @@ public class IdentUnraw(
     }
 
     public fun toLocal(): Ident {
-        val repr = unrawText()
-        val neverRaw = repr == "_" || repr == "super" || repr == "self" || repr == "Self" || repr == "crate"
-        return if (!neverRaw && ident.toString().startsWith("r#")) {
-            Ident.newRaw(repr, Span.callSite())
-        } else {
-            Ident.new(repr, ident.span())
+        val unraw = ident.unraw()
+        val repr = unraw.toString()
+        if (parseStr(IdentParse, repr).isFailure) {
+            if (repr != "_" && repr != "super" && repr != "self" && repr != "Self" && repr != "crate") {
+                return Ident.newRaw(repr, Span.callSite())
+            }
         }
+        return unraw
     }
 
     public fun setSpan(span: Span) {
@@ -77,7 +74,7 @@ public sealed class MemberUnraw : ToTokens {
     override fun toTokens(tokens: TokenStream) {
         when (this) {
             is Named -> ident.toTokens(tokens)
-            is Unnamed -> tokens.append(TokenTree.Literal(Literal.u32Unsuffixed(index.index)))
+            is Unnamed -> index.toTokens(tokens)
         }
     }
 

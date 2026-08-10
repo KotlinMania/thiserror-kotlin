@@ -4,6 +4,7 @@ package io.github.kotlinmania.thiserror.impl
 import io.github.kotlinmania.procmacro2.Ident
 import io.github.kotlinmania.procmacro2.Span
 import io.github.kotlinmania.procmacro2.TokenStream
+import io.github.kotlinmania.syn.Index
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
