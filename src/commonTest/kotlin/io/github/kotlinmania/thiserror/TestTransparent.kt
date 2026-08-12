@@ -6,13 +6,19 @@ import kotlin.test.assertEquals
 import kotlin.test.assertSame
 
 class TestTransparent {
-    private data class MessageError(val message: String, private val cause: StdError? = null) : StdError {
+    private data class MessageError(
+        val message: String,
+        private val cause: StdError? = null,
+    ) : StdError {
         override fun source(): StdError? = cause
 
         override fun toString(): String = message
     }
 
-    private data class ContextError(val message: String, private val cause: StdError) : StdError {
+    private data class ContextError(
+        val message: String,
+        private val cause: StdError,
+    ) : StdError {
         override fun source(): StdError = cause
 
         override fun toString(): String = message
@@ -23,12 +29,18 @@ class TestTransparent {
         class ErrorKindE0 : StdError {
             override fun toString(): String = "E0"
         }
-        data class ErrorKindE1(val io: StdError) : StdError {
+
+        data class ErrorKindE1(
+            val io: StdError,
+        ) : StdError {
             override fun source(): StdError = io
 
             override fun toString(): String = "E1"
         }
-        data class TransparentError(val inner: StdError) : StdError {
+
+        data class TransparentError(
+            val inner: StdError,
+        ) : StdError {
             override fun source(): StdError? = inner.source()
 
             override fun toString(): String = inner.toString()
@@ -49,7 +61,10 @@ class TestTransparent {
         class TransparentEnumThis : StdError {
             override fun toString(): String = "this failed"
         }
-        data class TransparentEnumOther(val inner: StdError) : StdError {
+
+        data class TransparentEnumOther(
+            val inner: StdError,
+        ) : StdError {
             override fun source(): StdError? = inner.source()
 
             override fun toString(): String = inner.toString()
@@ -66,10 +81,16 @@ class TestTransparent {
 
     @Test
     fun testTransparentEnumWithDefaultMessage() {
-        data class TransparentDefaultThis(val first: Int, val second: Int) : StdError {
+        data class TransparentDefaultThis(
+            val first: Int,
+            val second: Int,
+        ) : StdError {
             override fun toString(): String = "this failed: ${first}_$second"
         }
-        data class TransparentDefaultOther(val inner: StdError) : StdError {
+
+        data class TransparentDefaultOther(
+            val inner: StdError,
+        ) : StdError {
             override fun source(): StdError? = inner.source()
 
             override fun toString(): String = inner.toString()
@@ -86,7 +107,9 @@ class TestTransparent {
 
     @Test
     fun testAnyhow() {
-        data class AnyError(val inner: StdError) : StdError {
+        data class AnyError(
+            val inner: StdError,
+        ) : StdError {
             override fun source(): StdError? = inner.source()
 
             override fun toString(): String = inner.toString()
@@ -101,10 +124,15 @@ class TestTransparent {
 
     @Test
     fun testNonStatic() {
-        data class UnexpectedErrorKind(val token: String) : StdError {
+        data class UnexpectedErrorKind(
+            val token: String,
+        ) : StdError {
             override fun toString(): String = "unexpected token: \"$token\""
         }
-        data class TransparentError(val inner: StdError) : StdError {
+
+        data class TransparentError(
+            val inner: StdError,
+        ) : StdError {
             override fun source(): StdError? = inner.source()
 
             override fun toString(): String = inner.toString()

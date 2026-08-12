@@ -17,11 +17,15 @@ class TestExpr {
             }
         }
 
-        data class User(val parts: List<String>) : CompilerError() {
+        data class User(
+            val parts: List<String>,
+        ) : CompilerError() {
             override fun toString(): String = "#error ${parts.joinToString(" ")}"
         }
 
-        data class IntegerOverflow(val isSigned: Boolean?) : CompilerError() {
+        data class IntegerOverflow(
+            val isSigned: Boolean?,
+        ) : CompilerError() {
             override fun toString(): String = "overflow while parsing ${prefix()}integer literal"
 
             private fun prefix(): String =
@@ -32,7 +36,9 @@ class TestExpr {
                 }
         }
 
-        data class IntegerOverflow2(val isSigned: Boolean?) : CompilerError() {
+        data class IntegerOverflow2(
+            val isSigned: Boolean?,
+        ) : CompilerError() {
             override fun toString(): String =
                 "overflow while parsing ${
                     when (isSigned) {
@@ -55,7 +61,9 @@ class TestExpr {
         }
     }
 
-    private data class AssociatedTypeError(val value: String) : StdError {
+    private data class AssociatedTypeError(
+        val value: String,
+    ) : StdError {
         override fun toString(): String = "$value 0"
     }
 

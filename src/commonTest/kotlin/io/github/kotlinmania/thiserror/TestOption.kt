@@ -6,11 +6,15 @@ import kotlin.test.assertEquals
 import kotlin.test.assertSame
 
 class TestOption {
-    private data class AnyError(val message: String) : StdError {
+    private data class AnyError(
+        val message: String,
+    ) : StdError {
         override fun toString(): String = message
     }
 
-    private data class OptSourceNoBacktrace(val sourceError: StdError?) : StdError {
+    private data class OptSourceNoBacktrace(
+        val sourceError: StdError?,
+    ) : StdError {
         override fun source(): StdError? = sourceError
     }
 
@@ -26,7 +30,9 @@ class TestOption {
         }
     }
 
-    private data class NoSourceOptBacktrace(val backtrace: Backtrace?) : StdError {
+    private data class NoSourceOptBacktrace(
+        val backtrace: Backtrace?,
+    ) : StdError {
         override fun provide(request: Request) {
             if (backtrace != null) {
                 request.provideBacktrace(backtrace)
@@ -63,13 +69,18 @@ class TestOption {
     }
 
     private sealed class EnumOptSourceNoBacktrace : StdError {
-        data class Test(val sourceError: StdError?) : EnumOptSourceNoBacktrace() {
+        data class Test(
+            val sourceError: StdError?,
+        ) : EnumOptSourceNoBacktrace() {
             override fun source(): StdError? = sourceError
         }
     }
 
     private sealed class EnumOptSourceAlwaysBacktrace : StdError {
-        data class Test(val sourceError: StdError?, val backtrace: Backtrace) : EnumOptSourceAlwaysBacktrace() {
+        data class Test(
+            val sourceError: StdError?,
+            val backtrace: Backtrace,
+        ) : EnumOptSourceAlwaysBacktrace() {
             override fun source(): StdError? = sourceError
 
             override fun provide(request: Request) {
@@ -80,7 +91,9 @@ class TestOption {
     }
 
     private sealed class EnumNoSourceOptBacktrace : StdError {
-        data class Test(val backtrace: Backtrace?) : EnumNoSourceOptBacktrace() {
+        data class Test(
+            val backtrace: Backtrace?,
+        ) : EnumNoSourceOptBacktrace() {
             override fun provide(request: Request) {
                 if (backtrace != null) {
                     request.provideBacktrace(backtrace)
@@ -90,7 +103,10 @@ class TestOption {
     }
 
     private sealed class EnumAlwaysSourceOptBacktrace : StdError {
-        data class Test(val sourceError: StdError, val backtrace: Backtrace?) : EnumAlwaysSourceOptBacktrace() {
+        data class Test(
+            val sourceError: StdError,
+            val backtrace: Backtrace?,
+        ) : EnumAlwaysSourceOptBacktrace() {
             override fun source(): StdError = sourceError
 
             override fun provide(request: Request) {
@@ -103,7 +119,10 @@ class TestOption {
     }
 
     private sealed class EnumOptSourceOptBacktrace : StdError {
-        data class Test(val sourceError: StdError?, val backtrace: Backtrace?) : EnumOptSourceOptBacktrace() {
+        data class Test(
+            val sourceError: StdError?,
+            val backtrace: Backtrace?,
+        ) : EnumOptSourceOptBacktrace() {
             override fun source(): StdError? = sourceError
 
             override fun provide(request: Request) {

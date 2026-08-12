@@ -3,13 +3,11 @@ package io.github.kotlinmania.thiserror.impl
 
 import io.github.kotlinmania.procmacro2.TokenStream
 import io.github.kotlinmania.quote.ToTokens
-import io.github.kotlinmania.quote.toTokens
 import io.github.kotlinmania.syn.GenericArgument
 import io.github.kotlinmania.syn.Generics
 import io.github.kotlinmania.syn.Ident
 import io.github.kotlinmania.syn.PathArguments
 import io.github.kotlinmania.syn.SynType
-import io.github.kotlinmania.syn.TypeParamBound
 import io.github.kotlinmania.syn.TypeParamBoundList
 import io.github.kotlinmania.syn.TypeParamBoundParse
 import io.github.kotlinmania.syn.WhereClause
@@ -17,7 +15,9 @@ import io.github.kotlinmania.syn.WherePredicate
 import io.github.kotlinmania.syn.parse2
 import io.github.kotlinmania.syn.token.Plus
 
-public class ParamsInScope(generics: Generics) {
+public class ParamsInScope(
+    generics: Generics,
+) {
     private val names: Set<String> = generics.typeParams().map { it.ident.toString() }.toSet()
 
     public fun intersects(ty: SynType): Boolean {
@@ -69,7 +69,7 @@ public class InferredBounds {
             bounds.getOrPut(tyKey) { mutableSetOf<String>() to TypeParamBoundList() }
         val (set, boundList) = entry
         if (set.add(boundTokens.toString())) {
-            val bound = parse2(TypeParamBoundParse, boundTokens).getOrThrow()
+            val bound = parse2(TypeParamBoundParse::parse, boundTokens).getOrThrow()
             boundList.push(bound, Plus::default)
         }
     }
@@ -83,8 +83,10 @@ public class InferredBounds {
                 val (_, boundList) = boundsPair
                 whereClause.predicates.push(
                     WherePredicate.TypePredicate(
+                        null,
                         SynType.Verbatim(ty),
-                        io.github.kotlinmania.syn.token.Colon.default(),
+                        io.github.kotlinmania.syn.token.Colon
+                            .default(),
                         boundList.copy(),
                     ),
                     io.github.kotlinmania.syn.token.Comma::default,

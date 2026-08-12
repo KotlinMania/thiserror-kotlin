@@ -6,7 +6,9 @@ package io.github.kotlinmania.thiserror
  * Kotlin standard-error surface used by generated or handwritten error
  * implementations.
  */
-public interface StdError : AsDynError, ThiserrorProvide {
+public interface StdError :
+    AsDynError,
+    ThiserrorProvide {
     /**
      * The lower-level error that caused this error, if any.
      */

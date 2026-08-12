@@ -5,15 +5,21 @@ import kotlin.test.Test
 import kotlin.test.assertSame
 
 class TestFrom {
-    private data class IoError(val message: String) : StdError {
+    private data class IoError(
+        val message: String,
+    ) : StdError {
         override fun toString(): String = message
     }
 
-    private data class AnyError(val message: String) : StdError {
+    private data class AnyError(
+        val message: String,
+    ) : StdError {
         override fun toString(): String = message
     }
 
-    private data class ErrorStruct(val source: IoError) : StdError {
+    private data class ErrorStruct(
+        val source: IoError,
+    ) : StdError {
         override fun source(): StdError = source
 
         companion object {
@@ -21,7 +27,9 @@ class TestFrom {
         }
     }
 
-    private data class ErrorStructOptional(val source: IoError?) : StdError {
+    private data class ErrorStructOptional(
+        val source: IoError?,
+    ) : StdError {
         override fun source(): StdError? = source
 
         companion object {
@@ -29,7 +37,9 @@ class TestFrom {
         }
     }
 
-    private data class ErrorTuple(val source: IoError) : StdError {
+    private data class ErrorTuple(
+        val source: IoError,
+    ) : StdError {
         override fun source(): StdError = source
 
         companion object {
@@ -37,7 +47,9 @@ class TestFrom {
         }
     }
 
-    private data class ErrorTupleOptional(val source: IoError?) : StdError {
+    private data class ErrorTupleOptional(
+        val source: IoError?,
+    ) : StdError {
         override fun source(): StdError? = source
 
         companion object {
@@ -46,7 +58,9 @@ class TestFrom {
     }
 
     private sealed class ErrorEnum : StdError {
-        data class Test(val source: IoError) : ErrorEnum() {
+        data class Test(
+            val source: IoError,
+        ) : ErrorEnum() {
             override fun source(): StdError = source
         }
 
@@ -56,7 +70,9 @@ class TestFrom {
     }
 
     private sealed class ErrorEnumOptional : StdError {
-        data class Test(val source: IoError?) : ErrorEnumOptional() {
+        data class Test(
+            val source: IoError?,
+        ) : ErrorEnumOptional() {
             override fun source(): StdError? = source
         }
 
@@ -66,11 +82,15 @@ class TestFrom {
     }
 
     private sealed class Many : StdError {
-        data class Any(val source: AnyError) : Many() {
+        data class Any(
+            val source: AnyError,
+        ) : Many() {
             override fun source(): StdError = source
         }
 
-        data class Io(val source: IoError) : Many() {
+        data class Io(
+            val source: IoError,
+        ) : Many() {
             override fun source(): StdError = source
         }
 

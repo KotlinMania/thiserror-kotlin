@@ -13,7 +13,8 @@ import io.github.kotlinmania.syn.unraw
 
 public class IdentUnraw(
     private val ident: Ident,
-) : Comparable<IdentUnraw>, ToTokens {
+) : Comparable<IdentUnraw>,
+    ToTokens {
     public companion object {
         public fun new(ident: Ident): IdentUnraw =
             IdentUnraw(ident)
@@ -22,7 +23,7 @@ public class IdentUnraw(
     public fun toLocal(): Ident {
         val unraw = ident.unraw()
         val repr = unraw.toString()
-        if (parseStr(IdentParse, repr).isFailure) {
+        if (parseStr(IdentParse::parse, repr).isFailure) {
             if (repr != "_" && repr != "super" && repr != "self" && repr != "Self" && repr != "crate") {
                 return Ident.newRaw(repr, Span.callSite())
             }
@@ -62,8 +63,13 @@ public class IdentUnraw(
 }
 
 public sealed class MemberUnraw : ToTokens {
-    public class Named(public val ident: IdentUnraw) : MemberUnraw()
-    public class Unnamed(public val index: Index) : MemberUnraw()
+    public class Named(
+        public val ident: IdentUnraw,
+    ) : MemberUnraw()
+
+    public class Unnamed(
+        public val index: Index,
+    ) : MemberUnraw()
 
     public fun span(): Span =
         when (this) {

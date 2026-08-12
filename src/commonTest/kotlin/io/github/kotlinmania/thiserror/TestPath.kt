@@ -5,30 +5,43 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class TestPath {
-    private data class StructPathBuf(val file: String) : StdError {
+    private data class StructPathBuf(
+        val file: String,
+    ) : StdError {
         override fun toString(): String = "failed to read '$file'"
     }
 
-    private data class StructPath(val file: String) : StdError {
+    private data class StructPath(
+        val file: String,
+    ) : StdError {
         override fun toString(): String = "failed to read '$file'"
     }
 
     private sealed class EnumPathBuf : StdError {
-        data class Read(val file: String) : EnumPathBuf() {
+        data class Read(
+            val file: String,
+        ) : EnumPathBuf() {
             override fun toString(): String = "failed to read '$file'"
         }
     }
 
-    private data class UnsizedError(val head: Int, val tail: String) : StdError {
+    private data class UnsizedError(
+        val head: Int,
+        val tail: String,
+    ) : StdError {
         override fun toString(): String = tail
     }
 
     private sealed class BothError : StdError {
-        data class DisplayDebug(val path: String) : BothError() {
+        data class DisplayDebug(
+            val path: String,
+        ) : BothError() {
             override fun toString(): String = "display:$path debug:$path"
         }
 
-        data class DebugDisplay(val path: String) : BothError() {
+        data class DebugDisplay(
+            val path: String,
+        ) : BothError() {
             override fun toString(): String = "debug:$path display:$path"
         }
     }
