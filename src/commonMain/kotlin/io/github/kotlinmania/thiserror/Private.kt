@@ -8,3 +8,4 @@ package io.github.kotlinmania.thiserror
  * implementations. Kotlin keeps those helpers as package-level declarations
  * rather than central alias bridges.
  */
+private const val PRIVATE_MODULE: String = "private"

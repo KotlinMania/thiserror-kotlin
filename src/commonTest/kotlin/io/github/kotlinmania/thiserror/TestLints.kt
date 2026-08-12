@@ -6,24 +6,32 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class TestLints {
-    private data class AnyError(val message: String) : StdError {
+    private data class AnyError(
+        val message: String,
+    ) : StdError {
         override fun toString(): String = message
     }
 
-    private data class MyError(val sourceError: StdError? = null) : StdError {
+    private data class MyError(
+        val sourceError: StdError? = null,
+    ) : StdError {
         override fun source(): StdError? = sourceError
 
         override fun toString(): String = "..."
     }
 
     private sealed class MyLifetimeError : StdError {
-        data class A(val sourceError: StdError) : MyLifetimeError() {
+        data class A(
+            val sourceError: StdError,
+        ) : MyLifetimeError() {
             override fun source(): StdError = sourceError
 
             override fun toString(): String = "..."
         }
 
-        data class B(val value: Unit) : MyLifetimeError() {
+        data class B(
+            val value: Unit,
+        ) : MyLifetimeError() {
             override fun toString(): String = "..."
         }
     }
@@ -32,7 +40,9 @@ class TestLints {
         override fun toString(): String = "..."
     }
 
-    private data class DeprecatedStructField(val message: String) : StdError {
+    private data class DeprecatedStructField(
+        val message: String,
+    ) : StdError {
         override fun toString(): String = "$message $message"
     }
 
@@ -49,7 +59,9 @@ class TestLints {
     }
 
     private sealed class DeprecatedFrom : StdError {
-        data class Variant(val sourceError: DeprecatedStruct) : DeprecatedFrom() {
+        data class Variant(
+            val sourceError: DeprecatedStruct,
+        ) : DeprecatedFrom() {
             override fun source(): StdError = sourceError
 
             override fun toString(): String = sourceError.toString()
