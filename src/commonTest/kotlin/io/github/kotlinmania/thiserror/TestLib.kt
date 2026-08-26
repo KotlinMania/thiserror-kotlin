@@ -8,6 +8,6 @@ class TestLib {
     @Test
     fun deriveExportIsNamedError() {
         assertEquals(Error, Error)
-        assertEquals(Thiserror, Thiserror)
+        assertEquals(ThiserrorModule, ThiserrorModule)
     }
 }
