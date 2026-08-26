@@ -16,4 +16,4 @@ package io.github.kotlinmania.thiserror
  */
 public object Error
 
-public object Thiserror
+public object ThiserrorModule
