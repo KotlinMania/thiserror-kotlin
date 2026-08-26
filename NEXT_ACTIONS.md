@@ -4,14 +4,14 @@ Based on AST analysis, here are the concrete next steps.
 
 ## Summary
 
-- **Files Present:** 21/67 (31.3%)
-- **Function parity:** 71/189 matched (target 314) — 37.6%
-- **Class/type parity:** 68/148 matched (target 203) — 45.9%
-- **Combined symbol parity:** 139/337 matched (target 517) — 41.2%
-- **Average inline-code cosine:** 0.32 (function body across 19 matched files)
-- **Average documentation cosine:** 0.00 (doc text across 19 matched files)
-- **Cheat-zeroed Files:** 4
-- **Critical Issues:** 18 files with <0.60 function similarity
+- **Files Present:** 29/67 (43.3%)
+- **Function parity:** 88/172 matched (target 337) — 51.2%
+- **Class/type parity:** 69/148 matched (target 225) — 46.6%
+- **Combined symbol parity:** 157/320 matched (target 562) — 49.1%
+- **Average inline-code cosine:** 0.38 (function body across 22 matched files)
+- **Average documentation cosine:** 0.00 (doc text across 22 matched files)
+- **Cheat-zeroed Files:** 8
+- **Critical Issues:** 22 files with <0.60 function similarity
 
 ## Priority 1: Fix Incomplete High-Dependency Files
 
@@ -55,7 +55,29 @@ Every matched file is listed below with function and type symbol parity.
 - **Proposed provenance header:** `// port-lint: source display.rs` (current: `// port-lint: source display.rs`)
 - **Lint issues:** 1
 
-### 3. var
+### 3. impl.scan_expr
+
+- **Target:** `impl.ScanExpr`
+- **Similarity:** 0.71
+- **Dependents:** 1
+- **Priority Score:** 1010302.9
+- **Functions:** 1/1 matched
+- **Missing functions:** _none_
+- **Types:** 1/2 matched (target 22)
+- **Missing types:** `Input`
+
+### 4. impl.fallback
+
+- **Target:** `impl.Fallback`
+- **Similarity:** 0.00
+- **Dependents:** 1
+- **Priority Score:** 1010110.0
+- **Functions:** 0/1 matched
+- **Missing functions:** `expand`
+- **Types:** 0/0 matched
+- **Missing types:** _none_
+
+### 5. var
 
 - **Target:** `thiserror.Var [PROVENANCE-FALLBACK]`
 - **Similarity:** 0.47
@@ -69,7 +91,51 @@ Every matched file is listed below with function and type symbol parity.
 - **Proposed provenance header:** `// port-lint: source var.rs` (current: `// port-lint: source var.rs`)
 - **Lint issues:** 1
 
-### 4. impl.unraw
+### 6. impl.attr
+
+- **Target:** `impl.Attr [STUB]`
+- **Similarity:** 0.00
+- **Dependents:** 0
+- **Priority Score:** 111110.0
+- **Functions:** 0/4 matched (target 0)
+- **Missing functions:** `get`, `parse_error_attribute`, `parse_token_expr`, `to_tokens`
+- **Types:** 0/7 matched (target 0)
+- **Missing types:** `Attrs`, `Display`, `Source`, `From`, `Transparent`, `Fmt`, `Trait`
+
+### 7. impl.ast
+
+- **Target:** `impl.Ast [STUB]`
+- **Similarity:** 0.00
+- **Dependents:** 0
+- **Priority Score:** 111110.0
+- **Functions:** 0/5 matched (target 0)
+- **Missing functions:** `from_syn`, `multiple_from_syn`, `from_struct`, `from_variant`, `fmt`
+- **Types:** 0/6 matched (target 0)
+- **Missing types:** `Input`, `Struct`, `Enum`, `Variant`, `Field`, `ContainerKind`
+
+### 8. impl.prop
+
+- **Target:** `impl.Prop [STUB]`
+- **Similarity:** 0.00
+- **Dependents:** 0
+- **Priority Score:** 101010.0
+- **Functions:** 0/10 matched (target 0)
+- **Missing functions:** `from_field`, `source_field`, `backtrace_field`, `distinct_backtrace_field`, `has_source`, `has_backtrace`, `has_display`, `is_backtrace`, `source_span`, `type_is_backtrace`
+- **Types:** 0/0 matched
+- **Missing types:** _none_
+
+### 9. impl.fmt
+
+- **Target:** `impl.Fmt [STUB]`
+- **Similarity:** 0.00
+- **Dependents:** 0
+- **Priority Score:** 90910.0
+- **Functions:** 0/8 matched (target 0)
+- **Missing functions:** `expand_shorthand`, `explicit_named_args`, `try_explicit_named_args`, `fallback_explicit_named_args`, `is_syn_full`, `take_int`, `take_ident`, `between`
+- **Types:** 0/1 matched (target 0)
+- **Missing types:** `FmtArguments`
+
+### 10. impl.unraw
 
 - **Target:** `impl.Unraw`
 - **Similarity:** 0.34
@@ -80,7 +146,7 @@ Every matched file is listed below with function and type symbol parity.
 - **Types:** 2/2 matched (target 5)
 - **Missing types:** _none_
 
-### 5. tests.test_error
+### 11. tests.test_error
 
 - **Target:** `thiserror.TestErrorDefinitions [ZERO]`
 - **Similarity:** 0.00
@@ -91,7 +157,7 @@ Every matched file is listed below with function and type symbol parity.
 - **Types:** 0/6 matched (target 9)
 - **Missing types:** `BracedError`, `TupleError`, `UnitError`, `WithSource`, `WithAnyhow`, `EnumError`
 
-### 6. tests.test_display
+### 12. tests.test_display
 
 - **Target:** `thiserror.TestDisplay`
 - **Similarity:** 0.26
@@ -103,7 +169,7 @@ Every matched file is listed below with function and type symbol parity.
 - **Missing types:** `Error`, `Struct`
 - **Tests:** 29/29 matched
 
-### 7. tests.test_expr
+### 13. tests.test_expr
 
 - **Target:** `thiserror.TestExpr`
 - **Similarity:** 0.28
@@ -115,7 +181,7 @@ Every matched file is listed below with function and type symbol parity.
 - **Missing types:** `Trait`, `A`, `Error`
 - **Tests:** 3/3 matched
 
-### 8. tests.test_transparent
+### 14. tests.test_transparent
 
 - **Target:** `thiserror.TestTransparent`
 - **Similarity:** 0.34
@@ -127,9 +193,9 @@ Every matched file is listed below with function and type symbol parity.
 - **Missing types:** `Error`, `ErrorKind`, `Any`
 - **Tests:** 5/5 matched
 
-### 9. impl.lib
+### 15. impl.lib
 
-- **Target:** `thiserror.Lib [ZERO] [PROVENANCE-FALLBACK]`
+- **Target:** `impl.Lib [STUB] [PROVENANCE-FALLBACK]`
 - **Similarity:** 0.00
 - **Dependents:** 0
 - **Priority Score:** 30310.0
@@ -141,7 +207,7 @@ Every matched file is listed below with function and type symbol parity.
 - **Proposed provenance header:** `// port-lint: source lib.rs` (current: `// port-lint: source lib.rs`)
 - **Lint issues:** 1
 
-### 10. tests.test_generics
+### 16. tests.test_generics
 
 - **Target:** `thiserror.TestGenerics`
 - **Similarity:** 0.27
@@ -153,7 +219,7 @@ Every matched file is listed below with function and type symbol parity.
 - **Missing types:** `Error`
 - **Tests:** 3/3 matched
 
-### 11. tests.test_backtrace
+### 17. tests.test_backtrace
 
 - **Target:** `thiserror.TestBacktrace`
 - **Similarity:** 0.08
@@ -165,7 +231,7 @@ Every matched file is listed below with function and type symbol parity.
 - **Missing types:** `Backtrace`
 - **Tests:** 1/1 matched
 
-### 12. tests.test_from
+### 18. tests.test_from
 
 - **Target:** `thiserror.TestFrom`
 - **Similarity:** 0.11
@@ -177,7 +243,7 @@ Every matched file is listed below with function and type symbol parity.
 - **Missing types:** _none_
 - **Tests:** 1/1 matched
 
-### 13. tests.test_path
+### 19. tests.test_path
 
 - **Target:** `thiserror.TestPath`
 - **Similarity:** 0.27
@@ -189,18 +255,7 @@ Every matched file is listed below with function and type symbol parity.
 - **Missing types:** _none_
 - **Tests:** 1/1 matched
 
-### 14. impl.generics
-
-- **Target:** `impl.Generics`
-- **Similarity:** 0.51
-- **Dependents:** 0
-- **Priority Score:** 10704.9
-- **Functions:** 4/5 matched
-- **Missing functions:** `new`
-- **Types:** 2/2 matched
-- **Missing types:** _none_
-
-### 15. tests.test_lints
+### 20. tests.test_lints
 
 - **Target:** `thiserror.TestLints`
 - **Similarity:** 0.26
@@ -212,7 +267,18 @@ Every matched file is listed below with function and type symbol parity.
 - **Missing types:** _none_
 - **Tests:** 5/5 matched
 
-### 16. tests.test_source
+### 21. impl.expand
+
+- **Target:** `impl.Expand`
+- **Similarity:** 0.73
+- **Dependents:** 0
+- **Priority Score:** 1102.7
+- **Functions:** 11/11 matched
+- **Missing functions:** _none_
+- **Types:** 0/0 matched
+- **Missing types:** _none_
+
+### 22. tests.test_source
 
 - **Target:** `thiserror.TestSource`
 - **Similarity:** 0.62
@@ -224,7 +290,18 @@ Every matched file is listed below with function and type symbol parity.
 - **Missing types:** _none_
 - **Tests:** 4/4 matched
 
-### 17. tests.test_option
+### 23. impl.generics
+
+- **Target:** `impl.Generics`
+- **Similarity:** 0.68
+- **Dependents:** 0
+- **Priority Score:** 703.2
+- **Functions:** 5/5 matched (target 7)
+- **Missing functions:** _none_
+- **Types:** 2/2 matched
+- **Missing types:** _none_
+
+### 24. tests.test_option
 
 - **Target:** `thiserror.TestOption`
 - **Similarity:** 0.06
@@ -236,7 +313,18 @@ Every matched file is listed below with function and type symbol parity.
 - **Missing types:** _none_
 - **Tests:** 1/1 matched
 
-### 18. aserror
+### 25. impl.valid
+
+- **Target:** `impl.Valid`
+- **Similarity:** 0.82
+- **Dependents:** 0
+- **Priority Score:** 401.8
+- **Functions:** 4/4 matched (target 8)
+- **Missing functions:** _none_
+- **Types:** 0/0 matched
+- **Missing types:** _none_
+
+### 26. aserror
 
 - **Target:** `thiserror.Aserror [PROVENANCE-FALLBACK]`
 - **Similarity:** 0.05
@@ -250,7 +338,7 @@ Every matched file is listed below with function and type symbol parity.
 - **Proposed provenance header:** `// port-lint: source aserror.rs` (current: `// port-lint: source aserror.rs`)
 - **Lint issues:** 1
 
-### 19. provide
+### 27. provide
 
 - **Target:** `thiserror.Provide [PROVENANCE-FALLBACK]`
 - **Similarity:** 0.91
@@ -264,7 +352,7 @@ Every matched file is listed below with function and type symbol parity.
 - **Proposed provenance header:** `// port-lint: source provide.rs` (current: `// port-lint: source provide.rs`)
 - **Lint issues:** 1
 
-### 20. tests.compiletest
+### 28. tests.compiletest
 
 - **Target:** `thiserror.Compiletest`
 - **Similarity:** 0.19
@@ -276,7 +364,7 @@ Every matched file is listed below with function and type symbol parity.
 - **Missing types:** _none_
 - **Tests:** 1/1 matched
 
-### 21. lib
+### 29. lib
 
 - **Target:** `thiserror.TestLib [STUB]`
 - **Similarity:** 0.00
