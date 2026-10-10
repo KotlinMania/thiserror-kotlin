@@ -56,7 +56,7 @@ class TestExpr {
         val suggestion: String?,
     ) : StdError {
         override fun toString(): String {
-            val suffix = suggestion?.let { "; did you mean '$it'?" } ?: ""
+            val suffix = suggestion?.let { "; did you mean '$it'?" }.orEmpty()
             return "toolchain '$name' does not contain component $component$suffix"
         }
     }

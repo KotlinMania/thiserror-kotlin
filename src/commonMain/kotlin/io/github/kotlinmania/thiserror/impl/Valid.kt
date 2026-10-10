@@ -49,10 +49,10 @@ public fun Enum.validate() {
     val hasDisplay = this.hasDisplay()
     for (variant in this.variants) {
         variant.validate()
-        if (hasDisplay
-            && variant.attrs.display == null
-            && variant.attrs.transparent == null
-            && variant.attrs.fmt == null
+        if (hasDisplay &&
+            variant.attrs.display == null &&
+            variant.attrs.transparent == null &&
+            variant.attrs.fmt == null
         ) {
             throw SynError.newSpanned(
                 variant.original,
@@ -86,11 +86,12 @@ public fun Variant.validate() {
 }
 
 public fun Field.validate() {
-    val unexpectedDisplayAttr = when {
-        this.attrs.display != null -> this.attrs.display!!.original
-        this.attrs.fmt != null -> this.attrs.fmt!!.original
-        else -> null
-    }
+    val unexpectedDisplayAttr =
+        when {
+            this.attrs.display != null -> this.attrs.display!!.original
+            this.attrs.fmt != null -> this.attrs.fmt!!.original
+            else -> null
+        }
     if (unexpectedDisplayAttr != null) {
         throw SynError.newSpanned(
             unexpectedDisplayAttr,
@@ -202,10 +203,11 @@ private fun checkFieldAttrs(fields: List<Field>) {
     }
 
     if (fromField != null) {
-        val maxExpectedFields = when (backtraceField) {
-            null -> 1 + if (hasBacktrace) 1 else 0
-            else -> 1 + if (fromField.member != backtraceField.member) 1 else 0
-        }
+        val maxExpectedFields =
+            when (backtraceField) {
+                null -> 1 + if (hasBacktrace) 1 else 0
+                else -> 1 + if (fromField.member != backtraceField.member) 1 else 0
+            }
         if (fields.size > maxExpectedFields) {
             throw SynError.newSpanned(
                 fromField.attrs.from!!.original,
@@ -228,24 +230,38 @@ private fun checkFieldAttrs(fields: List<Field>) {
 private fun containsNonStaticLifetime(ty: SynType): Boolean {
     return when (ty) {
         is SynType.Path -> {
-            val last = ty.path.segments.toList().lastOrNull() ?: return false
-            val bracketed = when (val args = last.arguments) {
-                is PathArguments.AngleBracketed -> args
-                else -> return false
-            }
+            val last =
+                ty.path.segments
+                    .toList()
+                    .lastOrNull() ?: return false
+            val bracketed =
+                when (val args = last.arguments) {
+                    is PathArguments.AngleBracketed -> args
+                    else -> return false
+                }
             for (arg in bracketed.args.toList()) {
                 when (arg) {
-                    is GenericArgument.TypeArg -> if (containsNonStaticLifetime(arg.type)) return true
-                    is GenericArgument.LifetimeArg -> if (arg.lifetime.ident.toString() != "static") return true
+                    is GenericArgument.TypeArg -> {
+                        if (containsNonStaticLifetime(arg.type)) return true
+                    }
+
+                    is GenericArgument.LifetimeArg -> {
+                        if (arg.lifetime.ident.toString() != "static") return true
+                    }
+
                     else -> {}
                 }
             }
             false
         }
+
         is SynType.Reference -> {
             val lifetime = ty.lifetime
             lifetime != null && lifetime.ident.toString() != "static"
         }
-        else -> false
+
+        else -> {
+            false
+        }
     }
 }

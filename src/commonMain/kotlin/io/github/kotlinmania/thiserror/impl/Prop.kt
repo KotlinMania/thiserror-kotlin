@@ -27,11 +27,11 @@ public fun Enum.hasBacktrace(): Boolean =
     }
 
 public fun Enum.hasDisplay(): Boolean =
-    this.attrs.display != null
-        || this.attrs.transparent != null
-        || this.attrs.fmt != null
-        || this.variants.any { variant -> variant.attrs.display != null || variant.attrs.fmt != null }
-        || this.variants.all { variant -> variant.attrs.transparent != null }
+    this.attrs.display != null ||
+        this.attrs.transparent != null ||
+        this.attrs.fmt != null ||
+        this.variants.any { variant -> variant.attrs.display != null || variant.attrs.fmt != null } ||
+        this.variants.all { variant -> variant.attrs.transparent != null }
 
 public fun Variant.fromField(): Field? = fromField(this.fields)
 
@@ -80,6 +80,7 @@ public fun sourceField(fields: List<Field>): Field? {
                     return field
                 }
             }
+
             is MemberUnraw.Unnamed -> {}
         }
     }
@@ -103,19 +104,19 @@ public fun backtraceField(fields: List<Field>): Field? {
 public fun distinctBacktraceField(
     backtraceField: Field,
     fromField: Field?,
-): Field? {
-    return if (fromField != null && fromField.member == backtraceField.member) {
+): Field? =
+    if (fromField != null && fromField.member == backtraceField.member) {
         null
     } else {
         backtraceField
     }
-}
 
 public fun typeIsBacktrace(ty: SynType): Boolean {
-    val path = when (ty) {
-        is SynType.Path -> ty.path
-        else -> return false
-    }
+    val path =
+        when (ty) {
+            is SynType.Path -> ty.path
+            else -> return false
+        }
 
     val last = path.segments.toList().lastOrNull() ?: return false
     return last.ident.toString() == "Backtrace" && last.arguments is PathArguments.None

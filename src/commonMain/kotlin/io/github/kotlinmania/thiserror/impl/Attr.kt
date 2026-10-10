@@ -74,9 +74,15 @@ public class Attrs(
     public var fmt: Fmt? = null,
 )
 
-public data class ImpliedBound(public val index: Int, public val trait: Trait)
+public data class ImpliedBound(
+    public val index: Int,
+    public val trait: Trait,
+)
 
-public data class DisplayBinding(public val name: Ident, public val expr: TokenStream)
+public data class DisplayBinding(
+    public val name: Ident,
+    public val expr: TokenStream,
+)
 
 public class Display(
     public val original: Attribute,
@@ -112,11 +118,12 @@ public class Display(
             ).toTokens(tokens)
         }
 
-        val write = if (requiresFmtMachinery) {
-            quote("::core::write!(__formatter, #fmt #args)", mapOf("fmt" to fmt, "args" to args))
-        } else {
-            quote("__formatter.write_str(#fmt)", mapOf("fmt" to fmt))
-        }
+        val write =
+            if (requiresFmtMachinery) {
+                quote("::core::write!(__formatter, #fmt #args)", mapOf("fmt" to fmt, "args" to args))
+            } else {
+                quote("__formatter.write_str(#fmt)", mapOf("fmt" to fmt))
+            }
 
         if (bindings.isEmpty()) {
             write.toTokens(tokens)
@@ -135,7 +142,9 @@ public class Display(
     }
 }
 
-public enum class Trait(public val traitName: String) : ToTokens {
+public enum class Trait(
+    public val traitName: String,
+) : ToTokens {
     Debug("Debug"),
     Display("Display"),
     Octal("Octal"),
@@ -144,7 +153,8 @@ public enum class Trait(public val traitName: String) : ToTokens {
     Pointer("Pointer"),
     Binary("Binary"),
     LowerExp("LowerExp"),
-    UpperExp("UpperExp");
+    UpperExp("UpperExp"),
+    ;
 
     override fun toTokens(tokens: TokenStream) {
         val ident = Ident.new(traitName, Span.callSite())
@@ -200,6 +210,7 @@ private fun parseErrorAttribute(attr: Attribute, attrs: Attrs): SynResult<Unit> 
                 parseErrorArgs(input, attr, attrs)
             }
         }
+
         else -> {
             SynResult.failure(
                 SynError.newSpanned(attr, "expected #[error(...)] or #[error(\"...\")]"),
@@ -212,24 +223,26 @@ private fun parseErrorArgs(input: ParseStream, attr: Attribute, attrs: Attrs): S
     val isLitStr = input.peek(LitPeek) && input.fork().let { LitStrParse.parse(it).isSuccess }
     if (isLitStr) {
         val litStr = LitStrParse.parse(input).getOrElse { return SynResult.failure(it) }
-        val args = if (input.isEmpty() || (input.peek(CommaPeek) && input.peek2(End))) {
-            if (input.peek(CommaPeek)) {
-                CommaParse.parse(input).getOrElse { return SynResult.failure(it) }
+        val args =
+            if (input.isEmpty() || (input.peek(CommaPeek) && input.peek2(End))) {
+                if (input.peek(CommaPeek)) {
+                    CommaParse.parse(input).getOrElse { return SynResult.failure(it) }
+                }
+                TokenStream.new()
+            } else {
+                parseTokenExpr(input, false).getOrElse { return SynResult.failure(it) }
             }
-            TokenStream.new()
-        } else {
-            parseTokenExpr(input, false).getOrElse { return SynResult.failure(it) }
-        }
         val requiresFmtMachinery = !args.isEmpty()
         if (attrs.display != null) {
             return SynResult.failure(SynError.newSpanned(attr, "only one #[error(...)] attribute is allowed"))
         }
-        attrs.display = Display(
-            original = attr,
-            fmt = litStr,
-            args = args,
-            requiresFmtMachinery = requiresFmtMachinery,
-        )
+        attrs.display =
+            Display(
+                original = attr,
+                fmt = litStr,
+                args = args,
+                requiresFmtMachinery = requiresFmtMachinery,
+            )
         return SynResult.success(Unit)
     }
 
@@ -332,55 +345,56 @@ private fun parseTokenExpr(input: ParseStream, mutBeginExpr: Boolean): SynResult
             }
         }
 
-        beginExpr = input.peek(BreakPeek)
-            || input.peek(ContinuePeek)
-            || input.peek(IfPeek)
-            || input.peek(InPeek)
-            || input.peek(MatchPeek)
-            || input.peek(MutPeek)
-            || input.peek(ReturnPeek)
-            || input.peek(WhilePeek)
-            || input.peek(PlusPeek)
-            || input.peek(AndPeek)
-            || input.peek(NotPeek)
-            || input.peek(CaretPeek)
-            || input.peek(CommaPeek)
-            || input.peek(SlashPeek)
-            || input.peek(EqPeek)
-            || input.peek(GtPeek)
-            || input.peek(LtPeek)
-            || input.peek(OrPeek)
-            || input.peek(PercentPeek)
-            || input.peek(SemiPeek)
-            || input.peek(StarPeek)
-            || input.peek(MinusPeek)
+        beginExpr = input.peek(BreakPeek) ||
+            input.peek(ContinuePeek) ||
+            input.peek(IfPeek) ||
+            input.peek(InPeek) ||
+            input.peek(MatchPeek) ||
+            input.peek(MutPeek) ||
+            input.peek(ReturnPeek) ||
+            input.peek(WhilePeek) ||
+            input.peek(PlusPeek) ||
+            input.peek(AndPeek) ||
+            input.peek(NotPeek) ||
+            input.peek(CaretPeek) ||
+            input.peek(CommaPeek) ||
+            input.peek(SlashPeek) ||
+            input.peek(EqPeek) ||
+            input.peek(GtPeek) ||
+            input.peek(LtPeek) ||
+            input.peek(OrPeek) ||
+            input.peek(PercentPeek) ||
+            input.peek(SemiPeek) ||
+            input.peek(StarPeek) ||
+            input.peek(MinusPeek)
 
-        val token: TokenTree = if (input.peek(ParenPeek)) {
-            val parens = parenthesized(input).getOrElse { return SynResult.failure(it) }
-            val nested = parseTokenExpr(parens.content, true).getOrElse { return SynResult.failure(it) }
-            parens.content.finishChildBuffer()
-            val group = Group(Delimiter.Parenthesis, nested)
-            group.setSpan(parens.token.span.join())
-            TokenTree.Group(group)
-        } else if (input.peek(BracePeek)) {
-            val braces = braced(input).getOrElse { return SynResult.failure(it) }
-            val nested = parseTokenExpr(braces.content, true).getOrElse { return SynResult.failure(it) }
-            braces.content.finishChildBuffer()
-            val group = Group(Delimiter.Brace, nested)
-            group.setSpan(braces.token.span.join())
-            TokenTree.Group(group)
-        } else if (input.peek(BracketPeek)) {
-            val brackets = bracketed(input).getOrElse { return SynResult.failure(it) }
-            val nested = parseTokenExpr(brackets.content, true).getOrElse { return SynResult.failure(it) }
-            brackets.content.finishChildBuffer()
-            val group = Group(Delimiter.Bracket, nested)
-            group.setSpan(brackets.token.span.join())
-            TokenTree.Group(group)
-        } else {
-            val parseRes = TokenTreeParse.parse(input)
-            if (parseRes.isFailure) return SynResult.failure(parseRes.exceptionOrNull() ?: SynError.new(Span.callSite(), "parse error"))
-            parseRes.getOrThrow()
-        }
+        val token: TokenTree =
+            if (input.peek(ParenPeek)) {
+                val parens = parenthesized(input).getOrElse { return SynResult.failure(it) }
+                val nested = parseTokenExpr(parens.content, true).getOrElse { return SynResult.failure(it) }
+                parens.content.finishChildBuffer()
+                val group = Group(Delimiter.Parenthesis, nested)
+                group.setSpan(parens.token.span.join())
+                TokenTree.Group(group)
+            } else if (input.peek(BracePeek)) {
+                val braces = braced(input).getOrElse { return SynResult.failure(it) }
+                val nested = parseTokenExpr(braces.content, true).getOrElse { return SynResult.failure(it) }
+                braces.content.finishChildBuffer()
+                val group = Group(Delimiter.Brace, nested)
+                group.setSpan(braces.token.span.join())
+                TokenTree.Group(group)
+            } else if (input.peek(BracketPeek)) {
+                val brackets = bracketed(input).getOrElse { return SynResult.failure(it) }
+                val nested = parseTokenExpr(brackets.content, true).getOrElse { return SynResult.failure(it) }
+                brackets.content.finishChildBuffer()
+                val group = Group(Delimiter.Bracket, nested)
+                group.setSpan(brackets.token.span.join())
+                TokenTree.Group(group)
+            } else {
+                val parseRes = TokenTreeParse.parse(input)
+                if (parseRes.isFailure) return SynResult.failure(parseRes.exceptionOrNull() ?: SynError.new(Span.callSite(), "parse error"))
+                parseRes.getOrThrow()
+            }
         tokens.add(token)
     }
     return SynResult.success(TokenStream.fromTokenTrees(tokens))

@@ -18,28 +18,52 @@ import io.github.kotlinmania.syn.SynType
 import io.github.kotlinmania.syn.peekExpr
 
 private sealed class InputRule {
-    data class Keyword(val expected: String) : InputRule()
-    data class Punct(val expected: String) : InputRule()
+    data class Keyword(
+        val expected: String,
+    ) : InputRule()
+
+    data class Punct(
+        val expected: String,
+    ) : InputRule()
+
     data object ConsumeAny : InputRule()
+
     data object ConsumeBinOp : InputRule()
+
     data object ConsumeBrace : InputRule()
+
     data object ConsumeDelimiter : InputRule()
+
     data object ConsumeIdent : InputRule()
+
     data object ConsumeLifetime : InputRule()
+
     data object ConsumeLiteral : InputRule()
+
     data object ConsumeNestedBrace : InputRule()
+
     data object ExpectPath : InputRule()
+
     data object ExpectTurbofish : InputRule()
+
     data object ExpectType : InputRule()
+
     data object CanBeginExpr : InputRule()
+
     data object Otherwise : InputRule()
+
     data object Empty : InputRule()
 }
 
 private sealed class Action {
-    data class SetState(val next: () -> List<Pair<InputRule, Action>>) : Action()
+    data class SetState(
+        val next: () -> List<Pair<InputRule, Action>>,
+    ) : Action()
+
     data object IncDepth : Action()
+
     data object DecDepth : Action()
+
     data object Finish : Action()
 }
 
@@ -263,161 +287,190 @@ public fun scanExpr(input: ParseStream): SynResult<Unit> {
     while (true) {
         var matchedRule = false
         for ((rule, action) in state) {
-            val matched = when (rule) {
-                is InputRule.Keyword -> {
-                    input.step { cursor ->
-                        val pair = cursor.ident()
-                        if (pair != null && pair.first.toString() == rule.expected) {
-                            SynResult.success(true to pair.second)
+            val matched =
+                when (rule) {
+                    is InputRule.Keyword -> {
+                        input
+                            .step { cursor ->
+                                val pair = cursor.ident()
+                                if (pair != null && pair.first.toString() == rule.expected) {
+                                    SynResult.success(true to pair.second)
+                                } else {
+                                    SynResult.success(false to cursor.deref())
+                                }
+                            }.getOrElse { return SynResult.failure(it) }
+                    }
+
+                    is InputRule.Punct -> {
+                        input
+                            .step { cursor ->
+                                val begin = cursor.deref()
+                                var current = begin
+                                var matchFound = false
+                                var nextCursor: Cursor = begin
+                                for ((i, ch) in rule.expected.withIndex()) {
+                                    val pair = current.punct() ?: break
+                                    val punct = pair.first
+                                    val rest = pair.second
+                                    if (punct.asChar() != ch) break
+                                    if (i == rule.expected.length - 1) {
+                                        matchFound = true
+                                        nextCursor = rest
+                                        break
+                                    }
+                                    if (punct.spacing() == Spacing.Joint) {
+                                        current = rest
+                                    } else {
+                                        break
+                                    }
+                                }
+                                if (matchFound) {
+                                    SynResult.success(true to nextCursor)
+                                } else {
+                                    SynResult.success(false to begin)
+                                }
+                            }.getOrElse { return SynResult.failure(it) }
+                    }
+
+                    is InputRule.ConsumeAny -> {
+                        input
+                            .step { cursor ->
+                                val tree = cursor.tokenTree()
+                                if (tree != null) {
+                                    SynResult.success(true to tree.second)
+                                } else {
+                                    SynResult.success(false to cursor.deref())
+                                }
+                            }.getOrElse { return SynResult.failure(it) }
+                    }
+
+                    is InputRule.ConsumeBinOp -> {
+                        val fork = input.fork()
+                        val binOpRes = BinOpParse.parse(fork)
+                        if (binOpRes.isSuccess) {
+                            input.advanceTo(fork)
+                            true
                         } else {
-                            SynResult.success(false to cursor.deref())
+                            false
                         }
-                    }.getOrElse { return SynResult.failure(it) }
-                }
-                is InputRule.Punct -> {
-                    input.step { cursor ->
-                        val begin = cursor.deref()
-                        var current = begin
-                        var matchFound = false
-                        var nextCursor: Cursor = begin
-                        for ((i, ch) in rule.expected.withIndex()) {
-                            val pair = current.punct() ?: break
-                            val punct = pair.first
-                            val rest = pair.second
-                            if (punct.asChar() != ch) break
-                            if (i == rule.expected.length - 1) {
-                                matchFound = true
-                                nextCursor = rest
-                                break
+                    }
+
+                    is InputRule.ConsumeBrace, InputRule.ConsumeNestedBrace -> {
+                        if (rule is InputRule.ConsumeBrace || depth > 0) {
+                            input
+                                .step { cursor ->
+                                    val group = cursor.group(Delimiter.Brace)
+                                    if (group != null) {
+                                        SynResult.success(true to group.third)
+                                    } else {
+                                        SynResult.success(false to cursor.deref())
+                                    }
+                                }.getOrElse { return SynResult.failure(it) }
+                        } else {
+                            false
+                        }
+                    }
+
+                    is InputRule.ConsumeDelimiter -> {
+                        input
+                            .step { cursor ->
+                                val anyGroup = cursor.anyGroup()
+                                if (anyGroup != null) {
+                                    SynResult.success(true to anyGroup.after)
+                                } else {
+                                    SynResult.success(false to cursor.deref())
+                                }
+                            }.getOrElse { return SynResult.failure(it) }
+                    }
+
+                    is InputRule.ConsumeIdent -> {
+                        val fork = input.fork()
+                        val identRes = IdentParse.parse(fork)
+                        if (identRes.isSuccess) {
+                            input.advanceTo(fork)
+                            true
+                        } else {
+                            false
+                        }
+                    }
+
+                    is InputRule.ConsumeLifetime -> {
+                        val fork = input.fork()
+                        val lifeRes = LifetimeParse.parse(fork)
+                        if (lifeRes.isSuccess) {
+                            input.advanceTo(fork)
+                            true
+                        } else {
+                            false
+                        }
+                    }
+
+                    is InputRule.ConsumeLiteral -> {
+                        val fork = input.fork()
+                        val litRes = LitParse.parse(fork)
+                        if (litRes.isSuccess) {
+                            input.advanceTo(fork)
+                            true
+                        } else {
+                            false
+                        }
+                    }
+
+                    is InputRule.ExpectPath -> {
+                        val pathRes = PathParse.parse(input)
+                        if (pathRes.isFailure) {
+                            return SynResult.failure(pathRes.exceptionOrNull() ?: input.error("expected path"))
+                        }
+                        true
+                    }
+
+                    is InputRule.ExpectTurbofish -> {
+                        if (input.peek(PathSepPeek)) {
+                            val turboRes = PathArguments.AngleBracketed.parseTurbofish(input)
+                            if (turboRes.isFailure) {
+                                return SynResult.failure(turboRes.exceptionOrNull() ?: input.error("expected turbofish"))
                             }
-                            if (punct.spacing() == Spacing.Joint) {
-                                current = rest
-                            } else {
-                                break
-                            }
                         }
-                        if (matchFound) {
-                            SynResult.success(true to nextCursor)
-                        } else {
-                            SynResult.success(false to begin)
-                        }
-                    }.getOrElse { return SynResult.failure(it) }
-                }
-                is InputRule.ConsumeAny -> {
-                    input.step { cursor ->
-                        val tree = cursor.tokenTree()
-                        if (tree != null) {
-                            SynResult.success(true to tree.second)
-                        } else {
-                            SynResult.success(false to cursor.deref())
-                        }
-                    }.getOrElse { return SynResult.failure(it) }
-                }
-                is InputRule.ConsumeBinOp -> {
-                    val fork = input.fork()
-                    val binOpRes = BinOpParse.parse(fork)
-                    if (binOpRes.isSuccess) {
-                        input.advanceTo(fork)
                         true
-                    } else {
-                        false
                     }
-                }
-                is InputRule.ConsumeBrace, InputRule.ConsumeNestedBrace -> {
-                    if (rule is InputRule.ConsumeBrace || depth > 0) {
-                        input.step { cursor ->
-                            val group = cursor.group(Delimiter.Brace)
-                            if (group != null) {
-                                SynResult.success(true to group.third)
-                            } else {
-                                SynResult.success(false to cursor.deref())
-                            }
-                        }.getOrElse { return SynResult.failure(it) }
-                    } else {
-                        false
-                    }
-                }
-                is InputRule.ConsumeDelimiter -> {
-                    input.step { cursor ->
-                        val anyGroup = cursor.anyGroup()
-                        if (anyGroup != null) {
-                            SynResult.success(true to anyGroup.after)
-                        } else {
-                            SynResult.success(false to cursor.deref())
+
+                    is InputRule.ExpectType -> {
+                        val typeRes = SynType.withoutPlus(input)
+                        if (typeRes.isFailure) {
+                            return SynResult.failure(typeRes.exceptionOrNull() ?: input.error("expected type"))
                         }
-                    }.getOrElse { return SynResult.failure(it) }
-                }
-                is InputRule.ConsumeIdent -> {
-                    val fork = input.fork()
-                    val identRes = IdentParse.parse(fork)
-                    if (identRes.isSuccess) {
-                        input.advanceTo(fork)
                         true
-                    } else {
-                        false
                     }
-                }
-                is InputRule.ConsumeLifetime -> {
-                    val fork = input.fork()
-                    val lifeRes = LifetimeParse.parse(fork)
-                    if (lifeRes.isSuccess) {
-                        input.advanceTo(fork)
+
+                    is InputRule.CanBeginExpr -> {
+                        peekExpr(input)
+                    }
+
+                    is InputRule.Otherwise -> {
                         true
-                    } else {
-                        false
+                    }
+
+                    is InputRule.Empty -> {
+                        input.isEmpty() || input.peek(CommaPeek)
                     }
                 }
-                is InputRule.ConsumeLiteral -> {
-                    val fork = input.fork()
-                    val litRes = LitParse.parse(fork)
-                    if (litRes.isSuccess) {
-                        input.advanceTo(fork)
-                        true
-                    } else {
-                        false
-                    }
-                }
-                is InputRule.ExpectPath -> {
-                    val pathRes = PathParse.parse(input)
-                    if (pathRes.isFailure) {
-                        return SynResult.failure(pathRes.exceptionOrNull() ?: input.error("expected path"))
-                    }
-                    true
-                }
-                is InputRule.ExpectTurbofish -> {
-                    if (input.peek(PathSepPeek)) {
-                        val turboRes = PathArguments.AngleBracketed.parseTurbofish(input)
-                        if (turboRes.isFailure) {
-                            return SynResult.failure(turboRes.exceptionOrNull() ?: input.error("expected turbofish"))
-                        }
-                    }
-                    true
-                }
-                is InputRule.ExpectType -> {
-                    val typeRes = SynType.withoutPlus(input)
-                    if (typeRes.isFailure) {
-                        return SynResult.failure(typeRes.exceptionOrNull() ?: input.error("expected type"))
-                    }
-                    true
-                }
-                is InputRule.CanBeginExpr -> peekExpr(input)
-                is InputRule.Otherwise -> true
-                is InputRule.Empty -> input.isEmpty() || input.peek(CommaPeek)
-            }
 
             if (matched) {
                 when (action) {
                     is Action.SetState -> {
                         state = action.next()
                     }
+
                     is Action.IncDepth -> {
                         depth += 1
                         state = INIT
                     }
+
                     is Action.DecDepth -> {
                         depth -= 1
                         state = POSTFIX
                     }
+
                     is Action.Finish -> {
                         return if (depth == 0) {
                             SynResult.success(Unit)

@@ -59,60 +59,97 @@ public fun Display.expandShorthand(fields: List<Field>, container: ContainerKind
             continue
         }
         val next = read.firstOrNull() ?: return
-        val member = when (next) {
-            in '0'..'9' -> {
-                val intStr = takeInt(read)
-                read = read.substring(intStr.length)
-                if (!extraPositionalArgumentsAllowed) {
-                    val firstUnnamed = fmtArgs.firstUnnamed
-                    if (firstUnnamed != null) {
-                        val msg = "ambiguous reference to positional arguments by number in a $container; change this to a named argument"
-                        throw SynError.newSpanned(firstUnnamed, msg)
+        val member =
+            when (next) {
+                in '0'..'9' -> {
+                    val intStr = takeInt(read)
+                    read = read.substring(intStr.length)
+                    if (!extraPositionalArgumentsAllowed) {
+                        val firstUnnamed = fmtArgs.firstUnnamed
+                        if (firstUnnamed != null) {
+                            val msg = "ambiguous reference to positional arguments by number in a $container; change this to a named argument"
+                            throw SynError.newSpanned(firstUnnamed, msg)
+                        }
                     }
+                    val indexInt = intStr.toUIntOrNull() ?: return
+                    MemberUnraw.Unnamed(Index(indexInt, span))
                 }
-                val indexInt = intStr.toUIntOrNull() ?: return
-                MemberUnraw.Unnamed(Index(indexInt, span))
+
+                in 'a'..'z', in 'A'..'Z', '_' -> {
+                    if (read.startsWith("r#")) {
+                        continue
+                    }
+                    val repr = takeIdent(read)
+                    read = read.substring(repr.length)
+                    if (repr == "_") {
+                        out.append(repr)
+                        continue
+                    }
+                    val ident =
+                        IdentUnraw.new(
+                            io.github.kotlinmania.procmacro2.Ident
+                                .new(repr, span),
+                        )
+                    if (fmtArgs.named.contains(ident)) {
+                        out.append(repr)
+                        continue
+                    }
+                    MemberUnraw.Named(ident)
+                }
+
+                else -> {
+                    continue
+                }
             }
-            in 'a'..'z', in 'A'..'Z', '_' -> {
-                if (read.startsWith("r#")) {
-                    continue
-                }
-                val repr = takeIdent(read)
-                read = read.substring(repr.length)
-                if (repr == "_") {
-                    out.append(repr)
-                    continue
-                }
-                val ident = IdentUnraw.new(io.github.kotlinmania.procmacro2.Ident.new(repr, span))
-                if (fmtArgs.named.contains(ident)) {
-                    out.append(repr)
-                    continue
-                }
-                MemberUnraw.Named(ident)
-            }
-            else -> continue
-        }
 
         val endSpec = read.indexOf('}')
         if (endSpec == -1) return
         var bonusDisplay = false
         val spec = read.substring(0, endSpec)
-        val bound = when (spec.lastOrNull()) {
-            '?' -> Trait.Debug
-            'o' -> Trait.Octal
-            'x' -> Trait.LowerHex
-            'X' -> Trait.UpperHex
-            'p' -> Trait.Pointer
-            'b' -> Trait.Binary
-            'e' -> Trait.LowerExp
-            'E' -> Trait.UpperExp
-            null -> {
-                bonusDisplay = true
-                hasBonusDisplay = true
-                Trait.Display
+        val bound =
+            when (spec.lastOrNull()) {
+                '?' -> {
+                    Trait.Debug
+                }
+
+                'o' -> {
+                    Trait.Octal
+                }
+
+                'x' -> {
+                    Trait.LowerHex
+                }
+
+                'X' -> {
+                    Trait.UpperHex
+                }
+
+                'p' -> {
+                    Trait.Pointer
+                }
+
+                'b' -> {
+                    Trait.Binary
+                }
+
+                'e' -> {
+                    Trait.LowerExp
+                }
+
+                'E' -> {
+                    Trait.UpperExp
+                }
+
+                null -> {
+                    bonusDisplay = true
+                    hasBonusDisplay = true
+                    Trait.Display
+                }
+
+                else -> {
+                    Trait.Display
+                }
             }
-            else -> Trait.Display
-        }
 
         infiniteRecursive = infiniteRecursive || (member.contentEquals("self") && bound == Trait.Display)
         val fieldIdx = memberIndex[member]
@@ -122,20 +159,22 @@ public fun Display.expandShorthand(fields: List<Field>, container: ContainerKind
         }
 
         impliedBounds.add(ImpliedBound(fieldIdx, bound))
-        val formatvarPrefix = if (bonusDisplay) {
-            "__display"
-        } else if (bound == Trait.Pointer) {
-            "__pointer"
-        } else {
-            "__field"
-        }
+        val formatvarPrefix =
+            if (bonusDisplay) {
+                "__display"
+            } else if (bound == Trait.Pointer) {
+                "__pointer"
+            } else {
+                "__field"
+            }
 
-        var formatvar = IdentUnraw.new(
-            when (member) {
-                is MemberUnraw.Unnamed -> formatIdent("{}{}", formatvarPrefix, member.index.index)
-                is MemberUnraw.Named -> formatIdent("{}_{}", formatvarPrefix, member.ident.toString())
-            },
-        )
+        var formatvar =
+            IdentUnraw.new(
+                when (member) {
+                    is MemberUnraw.Unnamed -> formatIdent("{}{}", formatvarPrefix, member.index.index)
+                    is MemberUnraw.Named -> formatIdent("{}_{}", formatvarPrefix, member.ident.toString())
+                },
+            )
         while (fmtArgs.named.contains(formatvar)) {
             formatvar = IdentUnraw.new(formatIdent("_{}", formatvar.toString()))
         }
@@ -145,19 +184,21 @@ public fun Display.expandShorthand(fields: List<Field>, container: ContainerKind
             continue
         }
 
-        val bindingValue = when (member) {
-            is MemberUnraw.Unnamed -> formatIdent("_{}", member.index.index)
-            is MemberUnraw.Named -> member.ident.toLocal()
-        }
+        val bindingValue =
+            when (member) {
+                is MemberUnraw.Unnamed -> formatIdent("_{}", member.index.index)
+                is MemberUnraw.Named -> member.ident.toLocal()
+            }
         bindingValue.setSpan(span.resolvedAt(fields[fieldIdx].member.span()))
         val private = Private
-        val wrappedBindingValue = if (bonusDisplay) {
-            quoteSpanned(span, "#bindingValue.as_display()", mapOf("bindingValue" to bindingValue))
-        } else if (bound == Trait.Pointer) {
-            quote("::thiserror::#private::Var(#bindingValue)", mapOf("private" to private, "bindingValue" to bindingValue))
-        } else {
-            TokenStream.fromTokenTree(TokenTree.Ident(bindingValue))
-        }
+        val wrappedBindingValue =
+            if (bonusDisplay) {
+                quoteSpanned(span, "#bindingValue.as_display()", mapOf("bindingValue" to bindingValue))
+            } else if (bound == Trait.Pointer) {
+                quote("::thiserror::#private::Var(#bindingValue)", mapOf("private" to private, "bindingValue" to bindingValue))
+            } else {
+                TokenStream.fromTokenTree(TokenTree.Ident(bindingValue))
+            }
         bindings.add(DisplayBinding(formatvar.toLocal(), wrappedBindingValue))
     }
 
@@ -211,10 +252,11 @@ private fun explicitNamedArgsParse(input: ParseStream): SynResult<FmtArguments> 
 }
 
 private fun tryExplicitNamedArgs(input: ParseStream): SynResult<FmtArguments> {
-    val args = FmtArguments(
-        named = mutableSetOf(),
-        firstUnnamed = null,
-    )
+    val args =
+        FmtArguments(
+            named = mutableSetOf(),
+            firstUnnamed = null,
+        )
 
     while (!input.isEmpty()) {
         val commaRes = CommaParse.parse(input)
@@ -245,16 +287,17 @@ private fun tryExplicitNamedArgs(input: ParseStream): SynResult<FmtArguments> {
 }
 
 private fun fallbackExplicitNamedArgs(input: ParseStream): SynResult<FmtArguments> {
-    val args = FmtArguments(
-        named = mutableSetOf(),
-        firstUnnamed = null,
-    )
+    val args =
+        FmtArguments(
+            named = mutableSetOf(),
+            firstUnnamed = null,
+        )
 
     while (!input.isEmpty()) {
-        if (input.peek(CommaPeek)
-            && input.peek2(Ident.peekAny)
-            && input.peek3(EqPeek)
-            && !input.peek3(EqEqPeek)
+        if (input.peek(CommaPeek) &&
+            input.peek2(Ident.peekAny) &&
+            input.peek3(EqPeek) &&
+            !input.peek3(EqEqPeek)
         ) {
             CommaParse.parse(input).getOrElse { return SynResult.failure(it) }
             val identRes = Ident.parseAny(input)
