@@ -16,17 +16,21 @@ import io.github.kotlinmania.syn.Field as SynField
 import io.github.kotlinmania.syn.Variant as SynVariant
 
 public sealed class Input {
-    public class StructInput(public val struct: Struct) : Input()
-    public class EnumInput(public val enumVal: Enum) : Input()
+    public class StructInput(
+        public val struct: Struct,
+    ) : Input()
+
+    public class EnumInput(
+        public val enumVal: Enum,
+    ) : Input()
 
     public companion object {
-        public fun fromSyn(node: DeriveInput): Input {
-            return when (val data = node.data) {
+        public fun fromSyn(node: DeriveInput): Input =
+            when (val data = node.data) {
                 is Data.Struct -> StructInput(Struct.fromSyn(node, data.value))
                 is Data.Enum -> EnumInput(Enum.fromSyn(node, data.value))
                 is Data.Union -> throw SynError.newSpanned(node, "union as errors are not supported")
             }
-        }
     }
 }
 
@@ -66,20 +70,21 @@ public class Enum(
         public fun fromSyn(node: DeriveInput, data: DataEnum): Enum {
             val attrs = getAttrs(node.attrs).getOrThrow()
             val scope = ParamsInScope(node.generics)
-            val variants = data.variants.toList().map { variantNode ->
-                val variant = Variant.fromSyn(variantNode, scope)
-                if (variant.attrs.display == null && variant.attrs.transparent == null && variant.attrs.fmt == null) {
-                    variant.attrs.display = attrs.display?.copy()
-                    variant.attrs.transparent = attrs.transparent
-                    variant.attrs.fmt = attrs.fmt?.copy()
+            val variants =
+                data.variants.toList().map { variantNode ->
+                    val variant = Variant.fromSyn(variantNode, scope)
+                    if (variant.attrs.display == null && variant.attrs.transparent == null && variant.attrs.fmt == null) {
+                        variant.attrs.display = attrs.display?.copy()
+                        variant.attrs.transparent = attrs.transparent
+                        variant.attrs.fmt = attrs.fmt?.copy()
+                    }
+                    val display = variant.attrs.display
+                    if (display != null) {
+                        val container = ContainerKind.fromVariant(variantNode)
+                        display.expandShorthand(variant.fields, container)
+                    }
+                    variant
                 }
-                val display = variant.attrs.display
-                if (display != null) {
-                    val container = ContainerKind.fromVariant(variantNode)
-                    display.expandShorthand(variant.fields, container)
-                }
-                variant
-            }
             return Enum(
                 attrs = attrs,
                 ident = node.ident,
@@ -117,18 +122,21 @@ public class Field(
     public val containsGeneric: Boolean,
 ) {
     public companion object {
-        public fun multipleFromSyn(fields: Fields, scope: ParamsInScope): List<Field> {
-            return fields.iter().asSequence().mapIndexed { i, field ->
-                fromSyn(i, field, scope)
-            }.toList()
-        }
+        public fun multipleFromSyn(fields: Fields, scope: ParamsInScope): List<Field> =
+            fields
+                .iter()
+                .asSequence()
+                .mapIndexed { i, field ->
+                    fromSyn(i, field, scope)
+                }.toList()
 
         public fun fromSyn(i: Int, node: SynField, scope: ParamsInScope): Field {
             val attrs = getAttrs(node.attrs).getOrThrow()
-            val member = when (val name = node.ident) {
-                null -> MemberUnraw.Unnamed(Index(i.toUInt(), Span.callSite()))
-                else -> MemberUnraw.Named(IdentUnraw.new(name))
-            }
+            val member =
+                when (val name = node.ident) {
+                    null -> MemberUnraw.Unnamed(Index(i.toUInt(), Span.callSite()))
+                    else -> MemberUnraw.Named(IdentUnraw.new(name))
+                }
             return Field(
                 original = node,
                 attrs = attrs,
@@ -146,7 +154,8 @@ public enum class ContainerKind {
     UnitStruct,
     StructVariant,
     TupleVariant,
-    UnitVariant;
+    UnitVariant,
+    ;
 
     public companion object {
         public fun fromStruct(node: DataStruct): ContainerKind =

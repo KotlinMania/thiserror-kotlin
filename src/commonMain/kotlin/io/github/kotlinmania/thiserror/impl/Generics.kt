@@ -3,8 +3,8 @@ package io.github.kotlinmania.thiserror.impl
 
 import io.github.kotlinmania.procmacro2.TokenStream
 import io.github.kotlinmania.quote.ToTokens
-import io.github.kotlinmania.syn.Generics
 import io.github.kotlinmania.syn.GenericParam
+import io.github.kotlinmania.syn.Generics
 import io.github.kotlinmania.syn.Ident
 import io.github.kotlinmania.syn.PathArguments
 import io.github.kotlinmania.syn.SynType
@@ -15,10 +15,17 @@ import io.github.kotlinmania.syn.WherePredicate
 import io.github.kotlinmania.syn.parse2
 import io.github.kotlinmania.syn.token.Plus
 
-public class ParamsInScope(private val names: Set<String>) {
+public class ParamsInScope(
+    private val names: Set<String>,
+) {
     public constructor(generics: Generics) : this(
-        generics.params.toList().filterIsInstance<GenericParam.TypeParam>().map { it.ident.toString() }.toSet()
+        generics.params
+            .toList()
+            .filterIsInstance<GenericParam.TypeParam>()
+            .map { it.ident.toString() }
+            .toSet(),
     )
+
     public fun intersects(ty: SynType): Boolean {
         var found = false
         crawl(ty) { ident ->
@@ -40,12 +47,31 @@ public class ParamsInScope(private val names: Set<String>) {
                     crawlArguments(segment.arguments, visitor)
                 }
             }
-            is SynType.Reference -> crawl(ty.elem, visitor)
-            is SynType.Paren -> crawl(ty.elem, visitor)
-            is SynType.Group -> crawl(ty.elem, visitor)
-            is SynType.Array -> crawl(ty.elem, visitor)
-            is SynType.Slice -> crawl(ty.elem, visitor)
-            is SynType.Tuple -> ty.elems.toList().forEach { crawl(it, visitor) }
+
+            is SynType.Reference -> {
+                crawl(ty.elem, visitor)
+            }
+
+            is SynType.Paren -> {
+                crawl(ty.elem, visitor)
+            }
+
+            is SynType.Group -> {
+                crawl(ty.elem, visitor)
+            }
+
+            is SynType.Array -> {
+                crawl(ty.elem, visitor)
+            }
+
+            is SynType.Slice -> {
+                crawl(ty.elem, visitor)
+            }
+
+            is SynType.Tuple -> {
+                ty.elems.toList().forEach { crawl(it, visitor) }
+            }
+
             else -> {}
         }
     }
@@ -55,33 +81,46 @@ public class ParamsInScope(private val names: Set<String>) {
             is PathArguments.AngleBracketed -> {
                 for (arg in args.args.toList()) {
                     when (arg) {
-                        is io.github.kotlinmania.syn.GenericArgument.TypeArg -> crawl(arg.type, visitor)
-                        is io.github.kotlinmania.syn.GenericArgument.AssocTypeArg -> crawl(arg.assoc.ty, visitor)
+                        is io.github.kotlinmania.syn.GenericArgument.TypeArg -> {
+                            crawl(arg.type, visitor)
+                        }
+
+                        is io.github.kotlinmania.syn.GenericArgument.AssocTypeArg -> {
+                            crawl(arg.assoc.ty, visitor)
+                        }
+
                         else -> {}
                     }
                 }
             }
+
             is PathArguments.Parenthesized -> {
                 for (input in args.inputs.toList()) {
                     crawl(input, visitor)
                 }
                 when (val output = args.output) {
-                    is io.github.kotlinmania.syn.ReturnType.TypeReturn -> crawl(output.ty, visitor)
+                    is io.github.kotlinmania.syn.ReturnType.TypeReturn -> {
+                        crawl(output.ty, visitor)
+                    }
+
                     else -> {}
                 }
             }
+
             is PathArguments.None -> {}
         }
     }
 
     public companion object {
         public fun new(generics: Generics): ParamsInScope {
-            val names = generics.params.mapNotNull { param ->
-                when (param) {
-                    is GenericParam.TypeParam -> param.ident.toString()
-                    else -> null
-                }
-            }.toSet()
+            val names =
+                generics.params
+                    .mapNotNull { param ->
+                        when (param) {
+                            is GenericParam.TypeParam -> param.ident.toString()
+                            else -> null
+                        }
+                    }.toSet()
             return ParamsInScope(names)
         }
     }
@@ -92,16 +131,18 @@ public class InferredBounds {
     private val order: MutableList<TokenStream> = mutableListOf()
 
     public fun insert(ty: Any, bound: Any) {
-        val tyTokens = when (ty) {
-            is ToTokens -> ty.toTokenStream()
-            is TokenStream -> ty
-            else -> TokenStream.fromString(ty.toString()).getOrThrow()
-        }
-        val boundTokens = when (bound) {
-            is ToTokens -> bound.toTokenStream()
-            is TokenStream -> bound
-            else -> TokenStream.fromString(bound.toString()).getOrThrow()
-        }
+        val tyTokens =
+            when (ty) {
+                is ToTokens -> ty.toTokenStream()
+                is TokenStream -> ty
+                else -> TokenStream.fromString(ty.toString()).getOrThrow()
+            }
+        val boundTokens =
+            when (bound) {
+                is ToTokens -> bound.toTokenStream()
+                is TokenStream -> bound
+                else -> TokenStream.fromString(bound.toString()).getOrThrow()
+            }
         val tyKey = tyTokens.toString()
         if (!bounds.containsKey(tyKey)) {
             order.add(tyTokens)
@@ -126,7 +167,9 @@ public class InferredBounds {
                     WherePredicate.TypePredicate(
                         lifetimes = null,
                         boundedTy = SynType.Verbatim(ty),
-                        colonToken = io.github.kotlinmania.syn.token.Colon.default(),
+                        colonToken =
+                            io.github.kotlinmania.syn.token.Colon
+                                .default(),
                         bounds = boundList.copy(),
                     ),
                 )
