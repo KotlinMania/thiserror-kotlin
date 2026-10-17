@@ -1,11 +1,24 @@
 // port-lint: source tests/test_error.rs
 package io.github.kotlinmania.thiserror
 
+import io.github.kotlinmania.anyhow.anyhow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class TestErrorDefinitions {
+    private fun io.github.kotlinmania.anyhow.Error.asStdError(): StdError =
+        object : StdError {
+            override fun source(): StdError? =
+                this@asStdError.source()?.let { s ->
+                    object : StdError {
+                        override fun toString(): String = s.toString()
+                    }
+                }
+
+            override fun toString(): String = this@asStdError.toString()
+        }
+
     private data class TestErrorBracedError(
         val msg: String,
         val pos: Int,
@@ -84,9 +97,10 @@ class TestErrorDefinitions {
         assertEquals("WithSource", withSource.toString())
         assertEquals(unit, withSource.source())
 
-        val withAnyhow = TestErrorWithAnyhow(unit)
+        val any = anyhow("any error").asStdError()
+        val withAnyhow = TestErrorWithAnyhow(any)
         assertEquals("WithAnyhow", withAnyhow.toString())
-        assertEquals(unit, withAnyhow.source())
+        assertEquals(any, withAnyhow.source())
 
         val enumBraced = TestErrorEnumError.Braced(unit)
         assertEquals("Braced", enumBraced.toString())

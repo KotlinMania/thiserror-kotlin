@@ -56,18 +56,6 @@ public object SyntheticDisplay : AsDisplay, Target {
 }
 
 /**
- * Synthetic display implementation used when the general value adapter would
- * otherwise be the only applicable adapter.
- */
-public object Placeholder : AsDisplay, Target {
-    override fun asDisplay(): Target = this
-
-    override fun displayString(): String = toString()
-
-    override fun toString(): String = "Placeholder"
-}
-
-/**
  * Formats a display target to text.
  */
 public fun fmt(target: Target): String = target.displayString()

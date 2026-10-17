@@ -37,3 +37,11 @@ public interface StdError :
 public data class Backtrace(
     public val frames: String,
 )
+
+/**
+ * Root error object representing the thiserror derive export.
+ * Renamed to ThiserrorError to avoid collision with Swift.Error.
+ */
+public object ThiserrorError
+
+public object ThiserrorModule

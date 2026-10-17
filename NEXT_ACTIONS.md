@@ -4,14 +4,14 @@ Based on AST analysis, here are the concrete next steps.
 
 ## Summary
 
-- **Files Present:** 6/6 (100.0%)
-- **Function parity:** 5/5 matched (target 23) — 100.0%
-- **Class/type parity:** 9/9 matched (target 17) — 100.0%
-- **Combined symbol parity:** 14/14 matched (target 40) — 100.0%
-- **Average inline-code cosine:** 0.61 (function body across 4 matched files)
-- **Average documentation cosine:** 0.00 (doc text across 4 matched files)
-- **Cheat-zeroed Files:** 2
-- **Critical Issues:** 4 files with <0.60 function similarity
+- **Files Present:** 5/6 (83.3%)
+- **Function parity:** 5/5 matched (target 17) — 100.0%
+- **Class/type parity:** 8/9 matched (target 12) — 88.9%
+- **Combined symbol parity:** 13/14 matched (target 29) — 92.9%
+- **Average inline-code cosine:** 0.55 (function body across 5 matched files)
+- **Average documentation cosine:** 0.00 (doc text across 5 matched files)
+- **Cheat-zeroed Files:** 0
+- **Critical Issues:** 3 files with <0.60 function similarity
 
 ## Priority 1: Fix Incomplete High-Dependency Files
 
@@ -40,14 +40,14 @@ Every matched file is listed below with function and type symbol parity.
 
 ### 2. display
 
-- **Target:** `thiserror.Display [STUB]`
-- **Similarity:** 0.00
+- **Target:** `thiserror.Display`
+- **Similarity:** 0.33
 - **Dependents:** 0
-- **Priority Score:** 610.0
-- **Functions:** 2/2 matched (target 11)
+- **Priority Score:** 10606.7
+- **Functions:** 2/2 matched (target 8)
 - **Missing functions:** _none_
-- **Types:** 4/4 matched (target 7)
-- **Missing types:** _none_
+- **Types:** 3/4 matched (target 6)
+- **Missing types:** `Placeholder`
 
 ### 3. aserror
 
@@ -71,23 +71,7 @@ Every matched file is listed below with function and type symbol parity.
 - **Types:** 2/2 matched (target 3)
 - **Missing types:** _none_
 
-### 5. lib
-
-- **Target:** `thiserror.Lib [STUB] [PROVENANCE-FALLBACK]`
-- **Similarity:** 0.00
-- **Dependents:** 0
-- **Priority Score:** 10.0
-- **Functions:** 0/0 matched (target 3)
-- **Missing functions:** _none_
-- **Types:** 0/0 matched (target 4)
-- **Missing types:** _none_
-- **Provenance warning:** port-lint provenance header matched only after fallback normalization: `impl/src/lib.rs` vs expected `lib.rs`
-- **Provenance warning:** port-lint provenance header matched only after fallback normalization: `src/lib.rs` vs expected `lib.rs`
-- **Proposed provenance header:** `// port-lint: source lib.rs` (current: `// port-lint: source impl/src/lib.rs`)
-- **Proposed provenance header:** `// port-lint: source lib.rs` (current: `// port-lint: source src/lib.rs`)
-- **Lint issues:** 2
-
-### 6. private
+### 5. private
 
 - **Target:** `thiserror.Private`
 - **Similarity:** 1.00
@@ -106,4 +90,17 @@ For each file to be considered "complete":
 - All tests ported
 - Documentation ported
 - port-lint header present
+
+## Reexport / Wiring Modules
+
+These files match `reexport_modules` patterns in `.ast_distance_config.json`. They are filtered out of
+normal priority and missing-file ladders because they are wiring
+modules, not direct logic ports. Consult them for call-site routing;
+do not treat them as the next implementation target by default.
+
+### Missing
+
+| Source | Expected target | Deps | Source path | Expected path |
+|--------|-----------------|------|-------------|---------------|
+| `lib` | `Lib` | 0 | `lib.rs` | `Lib.kt` |
 

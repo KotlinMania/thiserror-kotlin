@@ -1,11 +1,25 @@
 // port-lint: source tests/test_backtrace.rs
 package io.github.kotlinmania.thiserror
 
+import io.github.kotlinmania.anyhow.anyhow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertSame
+import io.github.kotlinmania.anyhow.Error as AnyhowError
 
 class TestBacktrace {
+    private fun io.github.kotlinmania.anyhow.Error.asStdError(): StdError =
+        object : StdError {
+            override fun source(): StdError? =
+                this@asStdError.source()?.let { s ->
+                    object : StdError {
+                        override fun toString(): String = s.toString()
+                    }
+                }
+
+            override fun toString(): String = this@asStdError.toString()
+        }
+
     private class Inner : StdError {
         override fun toString(): String = "..."
     }
@@ -279,7 +293,7 @@ class TestBacktrace {
         assertSame(backtrace, requestBacktrace(CombinedBacktraceFrom.from(innerBacktrace)))
         assertEquals("captured", requestBacktrace(OptBacktraceFrom.from(Inner()))?.frames)
         assertEquals("captured", requestBacktrace(ArcBacktraceFrom.from(Inner()))?.frames)
-        assertSame(backtrace, requestBacktrace(AnyhowBacktrace(Inner(), backtrace)))
+        assertSame(backtrace, requestBacktrace(AnyhowBacktrace(anyhow("...").asStdError(), backtrace)))
         assertSame(backtrace, requestBacktrace(BoxDynErrorBacktrace(PlainBacktrace(backtrace))))
     }
 
