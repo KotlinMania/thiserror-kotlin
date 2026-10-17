@@ -1,16 +1,23 @@
 // port-lint: source tests/test_option.rs
 package io.github.kotlinmania.thiserror
 
+import io.github.kotlinmania.anyhow.anyhow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertSame
 
 class TestOption {
-    private data class AnyError(
-        val message: String,
-    ) : StdError {
-        override fun toString(): String = message
-    }
+    private fun io.github.kotlinmania.anyhow.Error.asStdError(): StdError =
+        object : StdError {
+            override fun source(): StdError? =
+                this@asStdError.source()?.let { s ->
+                    object : StdError {
+                        override fun toString(): String = s.toString()
+                    }
+                }
+
+            override fun toString(): String = this@asStdError.toString()
+        }
 
     private data class OptSourceNoBacktrace(
         val sourceError: StdError?,
@@ -136,7 +143,7 @@ class TestOption {
 
     @Test
     fun testOption() {
-        val source = AnyError("source")
+        val source = anyhow("source").asStdError()
         val backtrace = Backtrace("frame")
 
         assertSame(source, OptSourceNoBacktrace(source).source())

@@ -12,6 +12,7 @@ kotlinxBenchmark = "0.5.0"
 procMacro2 = "0.1.6"
 quote = "0.2.5"
 syn = "0.3.11"
+anyhow = "0.1.1"
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
@@ -32,6 +33,7 @@ kotlinx-benchmark-runtime = { module = "org.jetbrains.kotlinx:kotlinx-benchmark-
 proc-macro2-kotlin = { module = "io.github.kotlinmania:proc-macro2-kotlin", version.ref = "procMacro2" }
 quote-kotlin = { module = "io.github.kotlinmania:quote-kotlin", version.ref = "quote" }
 syn-kotlin = { module = "io.github.kotlinmania:syn-kotlin", version.ref = "syn" }
+anyhow-kotlin = { module = "io.github.kotlinmania:anyhow-kotlin", version.ref = "anyhow" }
 
 [bundles]
 thiserror-commonMain = [
@@ -43,4 +45,7 @@ thiserror-commonMain = [
   "proc-macro2-kotlin",
   "quote-kotlin",
   "syn-kotlin",
+]
+thiserror-commonTest = [
+  "anyhow-kotlin",
 ]

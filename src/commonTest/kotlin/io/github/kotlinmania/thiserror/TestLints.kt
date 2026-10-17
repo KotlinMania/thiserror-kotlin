@@ -1,16 +1,23 @@
 // port-lint: source tests/test_lints.rs
 package io.github.kotlinmania.thiserror
 
+import io.github.kotlinmania.anyhow.anyhow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class TestLints {
-    private data class AnyError(
-        val message: String,
-    ) : StdError {
-        override fun toString(): String = message
-    }
+    private fun io.github.kotlinmania.anyhow.Error.asStdError(): StdError =
+        object : StdError {
+            override fun source(): StdError? =
+                this@asStdError.source()?.let { s ->
+                    object : StdError {
+                        override fun toString(): String = s.toString()
+                    }
+                }
+
+            override fun toString(): String = this@asStdError.toString()
+        }
 
     private data class MyError(
         val sourceError: StdError? = null,
@@ -70,11 +77,11 @@ class TestLints {
 
     @Test
     fun testAllowAttributes() {
-        val source = AnyError("source")
+        val source = anyhow("source").asStdError()
         val error = MyError(source)
 
         assertEquals("...", error.toString())
-        assertIs<AnyError>(error.source())
+        assertEquals(source, error.source())
     }
 
     @Test
@@ -84,18 +91,18 @@ class TestLints {
 
     @Test
     fun testNeedlessLifetimes() {
-        val source = AnyError("source")
+        val source = anyhow("source").asStdError()
         val error = MyLifetimeError.A(source)
 
-        assertIs<AnyError>(error.source())
+        assertEquals(source, error.source())
         assertEquals("...", MyLifetimeError.B(Unit).toString())
     }
 
     @Test
     fun testForbidNeedlessLifetimes() {
-        val source = AnyError("source")
+        val source = anyhow("source").asStdError()
 
-        assertIs<AnyError>(MyError(source).source())
+        assertEquals(source, MyError(source).source())
     }
 
     @Test
