@@ -2,6 +2,7 @@
 package io.github.kotlinmania.thiserror.impl
 
 import io.github.kotlinmania.procmacro2.Delimiter
+import io.github.kotlinmania.procmacro2.Ident
 import io.github.kotlinmania.procmacro2.TokenStream
 import io.github.kotlinmania.procmacro2.TokenTree
 import io.github.kotlinmania.quote.formatIdent
@@ -12,7 +13,6 @@ import io.github.kotlinmania.syn.CommaPeek
 import io.github.kotlinmania.syn.EqEqPeek
 import io.github.kotlinmania.syn.EqParse
 import io.github.kotlinmania.syn.EqPeek
-import io.github.kotlinmania.procmacro2.Ident
 import io.github.kotlinmania.syn.Index
 import io.github.kotlinmania.syn.LitStr
 import io.github.kotlinmania.syn.ParseStream
