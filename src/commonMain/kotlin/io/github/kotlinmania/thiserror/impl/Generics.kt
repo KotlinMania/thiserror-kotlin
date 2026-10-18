@@ -1,11 +1,11 @@
 // port-lint: source impl/src/generics.rs
 package io.github.kotlinmania.thiserror.impl
 
+import io.github.kotlinmania.procmacro2.Ident
 import io.github.kotlinmania.procmacro2.TokenStream
 import io.github.kotlinmania.quote.ToTokens
 import io.github.kotlinmania.syn.GenericParam
 import io.github.kotlinmania.syn.Generics
-import io.github.kotlinmania.syn.Ident
 import io.github.kotlinmania.syn.PathArguments
 import io.github.kotlinmania.syn.SynType
 import io.github.kotlinmania.syn.TypeParamBoundList
