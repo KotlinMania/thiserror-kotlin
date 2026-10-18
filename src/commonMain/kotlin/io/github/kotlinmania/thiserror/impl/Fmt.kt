@@ -12,7 +12,7 @@ import io.github.kotlinmania.syn.CommaPeek
 import io.github.kotlinmania.syn.EqEqPeek
 import io.github.kotlinmania.syn.EqParse
 import io.github.kotlinmania.syn.EqPeek
-import io.github.kotlinmania.syn.Ident
+import io.github.kotlinmania.procmacro2.Ident
 import io.github.kotlinmania.syn.Index
 import io.github.kotlinmania.syn.LitStr
 import io.github.kotlinmania.syn.ParseStream

@@ -263,7 +263,7 @@ be dual licensed as above, without any additional terms or conditions.
 
 ```kotlin
 dependencies {
-    implementation("io.github.kotlinmania:thiserror-kotlin:0.2.1")
+    implementation("io.github.kotlinmania:thiserror-kotlin:0.2.2")
 }
 ```
 
