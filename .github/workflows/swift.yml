@@ -83,7 +83,6 @@ jobs:
           CONFIGURATION: Debug
           ARCHS: arm64
           FRAMEWORKS_FOLDER_PATH: Frameworks
-          # Match the committed Swift harness and Kotlin coroutine runtime minimum.
           MACOSX_DEPLOYMENT_TARGET: "15.0"
           DEPLOYMENT_TARGET_SETTING_NAME: MACOSX_DEPLOYMENT_TARGET
         run: ./gradlew embedSwiftExportForXcode --no-configuration-cache
