@@ -43,12 +43,12 @@ private fun implStruct(input: Struct): TokenStream {
             val transparentAttr = input.attrs.transparent!!
             val onlyField = input.fields[0]
             if (onlyField.containsGeneric) {
-                errorInferredBounds.insert(onlyField.ty, quote("::thiserror::#private::Error", mapOf("private" to privateIdent)))
+                errorInferredBounds.insert(onlyField.ty, quote("::thiserror::`#`private::Error", mapOf("private" to privateIdent)))
             }
             val member = onlyField.member
             quoteSpanned(
                 transparentAttr.span,
-                "::thiserror::#private::Error::source(self.#member.as_dyn_error())",
+                "::thiserror::`#`private::Error::source(self.`#`member.as_dyn_error())",
                 mapOf("private" to privateIdent, "member" to member),
             )
         } else if (input.sourceField() != null) {
@@ -56,7 +56,7 @@ private fun implStruct(input: Struct): TokenStream {
             val source = sourceField.member
             if (sourceField.containsGeneric) {
                 val unoptTy = unoptionalType(sourceField.ty)
-                errorInferredBounds.insert(unoptTy, quote("::thiserror::#private::Error + 'static", mapOf("private" to privateIdent)))
+                errorInferredBounds.insert(unoptTy, quote("::thiserror::`#`private::Error + 'static", mapOf("private" to privateIdent)))
             }
             val asref =
                 if (typeIsOption(sourceField.ty)) {
@@ -67,10 +67,10 @@ private fun implStruct(input: Struct): TokenStream {
             val dynError =
                 quoteSpanned(
                     sourceField.sourceSpan(),
-                    "self.#source #asref.as_dyn_error()",
+                    "self.`#`source `#`asref.as_dyn_error()",
                     mapOf("source" to source, "asref" to asref),
                 )
-            quote("::core::option::Option::Some(#dynError)", mapOf("dynError" to dynError))
+            quote("::core::option::Option::Some(`#`dynError)", mapOf("dynError" to dynError))
         } else {
             null
         }
@@ -79,9 +79,9 @@ private fun implStruct(input: Struct): TokenStream {
         if (sourceBody != null) {
             quote(
                 """
-            fn source(&self) -> ::core::option::Option<&(dyn ::thiserror::#private::Error + 'static)> {
-                use ::thiserror::#private::AsDynError as _;
-                #sourceBody
+            fn source(&self) -> ::core::option::Option<&(dyn ::thiserror::`#`private::Error + 'static)> {
+                use ::thiserror::`#`private::AsDynError as _;
+                `#`sourceBody
             }
             """,
                 mapOf("private" to privateIdent, "sourceBody" to sourceBody),
@@ -104,8 +104,8 @@ private fun implStruct(input: Struct): TokenStream {
                             quoteSpanned(
                                 source.span(),
                                 """
-                    if let ::core::option::Option::Some(source) = &self.#source {
-                        source.thiserror_provide(#request);
+                    if let ::core::option::Option::Some(source) = &self.`#`source {
+                        source.thiserror_provide(`#`request);
                     }
                     """,
                                 mapOf("source" to source, "request" to request),
@@ -113,7 +113,7 @@ private fun implStruct(input: Struct): TokenStream {
                         } else {
                             quoteSpanned(
                                 source.span(),
-                                "self.#source.thiserror_provide(#request);",
+                                "self.`#`source.thiserror_provide(`#`request);",
                                 mapOf("source" to source, "request" to request),
                             )
                         }
@@ -123,45 +123,45 @@ private fun implStruct(input: Struct): TokenStream {
                         } else if (typeIsOption(backtraceField.ty)) {
                             quote(
                                 """
-                    if let ::core::option::Option::Some(backtrace) = &self.#backtrace {
-                        #request.provide_ref::<::thiserror::#private::Backtrace>(backtrace);
+                    if let ::core::option::Option::Some(backtrace) = &self.`#`backtrace {
+                        `#`request.provide_ref::<::thiserror::`#`private::Backtrace>(backtrace);
                     }
                     """,
                                 mapOf("backtrace" to backtrace, "request" to request, "private" to privateIdent),
                             )
                         } else {
                             quote(
-                                "#request.provide_ref::<::thiserror::#private::Backtrace>(&self.#backtrace);",
+                                "`#`request.provide_ref::<::thiserror::`#`private::Backtrace>(&self.`#`backtrace);",
                                 mapOf("request" to request, "private" to privateIdent, "backtrace" to backtrace),
                             )
                         }
                     quote(
                         """
-                use ::thiserror::#private::ThiserrorProvide as _;
-                #sourceProvide
-                #selfProvide
+                use ::thiserror::`#`private::ThiserrorProvide as _;
+                `#`sourceProvide
+                `#`selfProvide
                 """,
                         mapOf("private" to privateIdent, "sourceProvide" to sourceProvide, "selfProvide" to selfProvide),
                     )
                 } else if (typeIsOption(backtraceField.ty)) {
                     quote(
                         """
-                if let ::core::option::Option::Some(backtrace) = &self.#backtrace {
-                    #request.provide_ref::<::thiserror::#private::Backtrace>(backtrace);
+                if let ::core::option::Option::Some(backtrace) = &self.`#`backtrace {
+                    `#`request.provide_ref::<::thiserror::`#`private::Backtrace>(backtrace);
                 }
                 """,
                         mapOf("backtrace" to backtrace, "request" to request, "private" to privateIdent),
                     )
                 } else {
                     quote(
-                        "#request.provide_ref::<::thiserror::#private::Backtrace>(&self.#backtrace);",
+                        "`#`request.provide_ref::<::thiserror::`#`private::Backtrace>(&self.`#`backtrace);",
                         mapOf("request" to request, "private" to privateIdent, "backtrace" to backtrace),
                     )
                 }
             quote(
                 """
-            fn provide<'_request>(&'_request self, #request: &mut ::core::error::Request<'_request>) {
-                #body
+            fn provide<'_request>(&'_request self, `#`request: &mut ::core::error::Request<'_request>) {
+                `#`body
             }
             """,
                 mapOf("request" to request, "body" to body),
@@ -175,7 +175,7 @@ private fun implStruct(input: Struct): TokenStream {
         if (input.attrs.transparent != null) {
             val onlyField = input.fields[0].member
             displayImpliedBounds.add(ImpliedBound(0, Trait.Display))
-            quote("::core::fmt::Display::fmt(&self.#onlyField, __formatter)", mapOf("onlyField" to onlyField))
+            quote("::core::fmt::Display::fmt(&self.`#`onlyField, __formatter)", mapOf("onlyField" to onlyField))
         } else if (input.attrs.display != null) {
             val display = input.attrs.display!!
             displayImpliedBounds.addAll(display.impliedBounds)
@@ -183,10 +183,10 @@ private fun implStruct(input: Struct): TokenStream {
             val pat = fieldsPat(input.fields)
             quote(
                 """
-            #useAsDisplayTokens
+            `#`useAsDisplayTokens
             #[allow(unused_variables, deprecated)]
-            let Self #pat = self;
-            #display
+            let Self `#`pat = self;
+            `#`display
             """,
                 mapOf("useAsDisplayTokens" to useAsDisplayTokens, "pat" to pat, "display" to display),
             )
@@ -208,10 +208,10 @@ private fun implStruct(input: Struct): TokenStream {
                 """
             #[allow(unused_qualifications)]
             #[automatically_derived]
-            impl #implGenerics ::core::fmt::Display for #ty #tyGenerics #displayWhereClause {
+            impl `#`implGenerics ::core::fmt::Display for `#`ty `#`tyGenerics `#`displayWhereClause {
                 #[allow(clippy::used_underscore_binding)]
                 fn fmt(&self, __formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-                    #displayBody
+                    `#`displayBody
                 }
             }
             """,
@@ -238,8 +238,8 @@ private fun implStruct(input: Struct): TokenStream {
             val fromFunction =
                 quote(
                     """
-            fn from(#sourceVar: #fromType) -> Self {
-                #ty #body
+            fn from(`#`sourceVar: `#`fromType) -> Self {
+                `#`ty `#`body
             }
             """,
                     mapOf("sourceVar" to sourceVar, "fromType" to fromType, "ty" to ty, "body" to body),
@@ -249,8 +249,8 @@ private fun implStruct(input: Struct): TokenStream {
                     span,
                     """
             #[automatically_derived]
-            impl #implGenerics ::core::convert::From<#fromType> for #ty #tyGenerics #whereClause {
-                #fromFunction
+            impl `#`implGenerics ::core::convert::From<`#`fromType> for `#`ty `#`tyGenerics `#`whereClause {
+                `#`fromFunction
             }
             """,
                     mapOf(
@@ -273,9 +273,9 @@ private fun implStruct(input: Struct): TokenStream {
             #[allow(
                 deprecated,
                 unused_qualifications,
-                #lintAllows
+                `#`lintAllows
             )]
-            #fromImplTokens
+            `#`fromImplTokens
             """,
                 mapOf("lintAllows" to lintAllows, "fromImplTokens" to fromImplTokens),
             )
@@ -294,12 +294,12 @@ private fun implStruct(input: Struct): TokenStream {
         """
         #[allow(unused_qualifications)]
         #[automatically_derived]
-        impl #implGenerics ::thiserror::#private::Error for #ty #tyGenerics #errorWhereClause {
-            #sourceMethod
-            #provideMethod
+        impl `#`implGenerics ::thiserror::`#`private::Error for `#`ty `#`tyGenerics `#`errorWhereClause {
+            `#`sourceMethod
+            `#`provideMethod
         }
-        #displayImpl
-        #fromImpl
+        `#`displayImpl
+        `#`fromImpl
         """,
         mapOf(
             "implGenerics" to implGenerics,
@@ -333,22 +333,22 @@ private fun implEnum(input: Enum): TokenStream {
                         val transparentAttr = variant.attrs.transparent!!
                         val onlyField = variant.fields[0]
                         if (onlyField.containsGeneric) {
-                            errorInferredBounds.insert(onlyField.ty, quote("::thiserror::#private::Error", mapOf("private" to privateIdent)))
+                            errorInferredBounds.insert(onlyField.ty, quote("::thiserror::`#`private::Error", mapOf("private" to privateIdent)))
                         }
                         val member = onlyField.member
                         val source =
                             quoteSpanned(
                                 transparentAttr.span,
-                                "::thiserror::#private::Error::source(transparent.as_dyn_error())",
+                                "::thiserror::`#`private::Error::source(transparent.as_dyn_error())",
                                 mapOf("private" to privateIdent),
                             )
-                        quote("#ty::#ident {#member: transparent} => #source,", mapOf("ty" to ty, "ident" to ident, "member" to member, "source" to source))
+                        quote("`#`ty::`#`ident {`#`member: transparent} => `#`source,", mapOf("ty" to ty, "ident" to ident, "member" to member, "source" to source))
                     } else if (variant.sourceField() != null) {
                         val sourceField = variant.sourceField()!!
                         val source = sourceField.member
                         if (sourceField.containsGeneric) {
                             val unoptTy = unoptionalType(sourceField.ty)
-                            errorInferredBounds.insert(unoptTy, quote("::thiserror::#private::Error + 'static", mapOf("private" to privateIdent)))
+                            errorInferredBounds.insert(unoptTy, quote("::thiserror::`#`private::Error + 'static", mapOf("private" to privateIdent)))
                         }
                         val asref =
                             if (typeIsOption(sourceField.ty)) {
@@ -360,24 +360,24 @@ private fun implEnum(input: Enum): TokenStream {
                         val dynError =
                             quoteSpanned(
                                 sourceField.sourceSpan(),
-                                "#varsource #asref.as_dyn_error()",
+                                "`#`varsource `#`asref.as_dyn_error()",
                                 mapOf("varsource" to varsource, "asref" to asref),
                             )
                         quote(
-                            "#ty::#ident {#source: #varsource, ..} => ::core::option::Option::Some(#dynError),",
+                            "`#`ty::`#`ident {`#`source: `#`varsource, ..} => ::core::option::Option::Some(`#`dynError),",
                             mapOf("ty" to ty, "ident" to ident, "source" to source, "varsource" to varsource, "dynError" to dynError),
                         )
                     } else {
-                        quote("#ty::#ident {..} => ::core::option::Option::None,", mapOf("ty" to ty, "ident" to ident))
+                        quote("`#`ty::`#`ident {..} => ::core::option::Option::None,", mapOf("ty" to ty, "ident" to ident))
                     }
                 }
             quote(
                 """
-            fn source(&self) -> ::core::option::Option<&(dyn ::thiserror::#private::Error + 'static)> {
-                use ::thiserror::#private::AsDynError as _;
+            fn source(&self) -> ::core::option::Option<&(dyn ::thiserror::`#`private::Error + 'static)> {
+                use ::thiserror::`#`private::AsDynError as _;
                 #[allow(deprecated)]
                 match self {
-                    #(#arms)*
+                    `#`(`#`arms)*
                 }
             }
             """,
@@ -404,8 +404,8 @@ private fun implEnum(input: Enum): TokenStream {
                                 quoteSpanned(
                                     source.span(),
                                     """
-                        if let ::core::option::Option::Some(source) = #varsource {
-                            source.thiserror_provide(#request);
+                        if let ::core::option::Option::Some(source) = `#`varsource {
+                            source.thiserror_provide(`#`request);
                         }
                         """,
                                     mapOf("varsource" to varsource, "request" to request),
@@ -413,7 +413,7 @@ private fun implEnum(input: Enum): TokenStream {
                             } else {
                                 quoteSpanned(
                                     source.span(),
-                                    "#varsource.thiserror_provide(#request);",
+                                    "`#`varsource.thiserror_provide(`#`request);",
                                     mapOf("varsource" to varsource, "request" to request),
                                 )
                             }
@@ -422,27 +422,27 @@ private fun implEnum(input: Enum): TokenStream {
                                 quote(
                                     """
                         if let ::core::option::Option::Some(backtrace) = backtrace {
-                            #request.provide_ref::<::thiserror::#private::Backtrace>(backtrace);
+                            `#`request.provide_ref::<::thiserror::`#`private::Backtrace>(backtrace);
                         }
                         """,
                                     mapOf("request" to request, "private" to privateIdent),
                                 )
                             } else {
                                 quote(
-                                    "#request.provide_ref::<::thiserror::#private::Backtrace>(backtrace);",
+                                    "`#`request.provide_ref::<::thiserror::`#`private::Backtrace>(backtrace);",
                                     mapOf("request" to request, "private" to privateIdent),
                                 )
                             }
                         quote(
                             """
-                    #ty::#ident {
-                        #backtrace: backtrace,
-                        #source: #varsource,
+                    `#`ty::`#`ident {
+                        `#`backtrace: backtrace,
+                        `#`source: `#`varsource,
                         ..
                     } => {
-                        use ::thiserror::#private::ThiserrorProvide as _;
-                        #sourceProvide
-                        #selfProvide
+                        use ::thiserror::`#`private::ThiserrorProvide as _;
+                        `#`sourceProvide
+                        `#`selfProvide
                     }
                     """,
                             mapOf(
@@ -464,8 +464,8 @@ private fun implEnum(input: Enum): TokenStream {
                                 quoteSpanned(
                                     backtrace.span(),
                                     """
-                        if let ::core::option::Option::Some(source) = #varsource {
-                            source.thiserror_provide(#request);
+                        if let ::core::option::Option::Some(source) = `#`varsource {
+                            source.thiserror_provide(`#`request);
                         }
                         """,
                                     mapOf("varsource" to varsource, "request" to request),
@@ -473,15 +473,15 @@ private fun implEnum(input: Enum): TokenStream {
                             } else {
                                 quoteSpanned(
                                     backtrace.span(),
-                                    "#varsource.thiserror_provide(#request);",
+                                    "`#`varsource.thiserror_provide(`#`request);",
                                     mapOf("varsource" to varsource, "request" to request),
                                 )
                             }
                         quote(
                             """
-                    #ty::#ident {#backtrace: #varsource, ..} => {
-                        use ::thiserror::#private::ThiserrorProvide as _;
-                        #sourceProvide
+                    `#`ty::`#`ident {`#`backtrace: `#`varsource, ..} => {
+                        use ::thiserror::`#`private::ThiserrorProvide as _;
+                        `#`sourceProvide
                     }
                     """,
                             mapOf(
@@ -500,31 +500,31 @@ private fun implEnum(input: Enum): TokenStream {
                                 quote(
                                     """
                         if let ::core::option::Option::Some(backtrace) = backtrace {
-                            #request.provide_ref::<::thiserror::#private::Backtrace>(backtrace);
+                            `#`request.provide_ref::<::thiserror::`#`private::Backtrace>(backtrace);
                         }
                         """,
                                     mapOf("request" to request, "private" to privateIdent),
                                 )
                             } else {
                                 quote(
-                                    "#request.provide_ref::<::thiserror::#private::Backtrace>(backtrace);",
+                                    "`#`request.provide_ref::<::thiserror::`#`private::Backtrace>(backtrace);",
                                     mapOf("request" to request, "private" to privateIdent),
                                 )
                             }
                         quote(
-                            "#ty::#ident {#backtrace: backtrace, ..} => { #body }",
+                            "`#`ty::`#`ident {`#`backtrace: backtrace, ..} => { `#`body }",
                             mapOf("ty" to ty, "ident" to ident, "backtrace" to backtrace, "body" to body),
                         )
                     } else {
-                        quote("#ty::#ident {..} => {}", mapOf("ty" to ty, "ident" to ident))
+                        quote("`#`ty::`#`ident {..} => {}", mapOf("ty" to ty, "ident" to ident))
                     }
                 }
             quote(
                 """
-            fn provide<'_request>(&'_request self, #request: &mut ::core::error::Request<'_request>) {
+            fn provide<'_request>(&'_request self, `#`request: &mut ::core::error::Request<'_request>) {
                 #[allow(deprecated)]
                 match self {
-                    #(#arms)*
+                    `#`(`#`arms)*
                 }
             }
             """,
@@ -557,7 +557,7 @@ private fun implEnum(input: Enum): TokenStream {
                                         is MemberUnraw.Unnamed -> formatIdent("_{}", m.index.index)
                                     }
                                 }
-                            quote("#fmtPath(#(#vars,)* __formatter)", mapOf("fmtPath" to fmtPath, "vars" to vars))
+                            quote("`#`fmtPath(`#`(`#`vars,)* __formatter)", mapOf("fmtPath" to fmtPath, "vars" to vars))
                         } else {
                             val onlyField =
                                 when (val m = variant.fields[0].member) {
@@ -565,7 +565,7 @@ private fun implEnum(input: Enum): TokenStream {
                                     is MemberUnraw.Unnamed -> formatIdent("_{}", m.index.index)
                                 }
                             displayImpliedBounds.add(ImpliedBound(0, Trait.Display))
-                            quote("::core::fmt::Display::fmt(#onlyField, __formatter)", mapOf("onlyField" to onlyField))
+                            quote("::core::fmt::Display::fmt(`#`onlyField, __formatter)", mapOf("onlyField" to onlyField))
                         }
                     for (bound in displayImpliedBounds) {
                         val field = variant.fields[bound.index]
@@ -575,19 +575,19 @@ private fun implEnum(input: Enum): TokenStream {
                     }
                     val ident = variant.ident
                     val pat = fieldsPat(variant.fields)
-                    quote("#ty::#ident #pat => #display", mapOf("ty" to ty, "ident" to ident, "pat" to pat, "display" to display))
+                    quote("`#`ty::`#`ident `#`pat => `#`display", mapOf("ty" to ty, "ident" to ident, "pat" to pat, "display" to display))
                 }
             val displayWhereClause = displayInferredBounds.augmentWhereClause(input.generics)
             quote(
                 """
             #[allow(unused_qualifications)]
             #[automatically_derived]
-            impl #implGenerics ::core::fmt::Display for #ty #tyGenerics #displayWhereClause {
+            impl `#`implGenerics ::core::fmt::Display for `#`ty `#`tyGenerics `#`displayWhereClause {
                 fn fmt(&self, __formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-                    #useAsDisplayTokens
+                    `#`useAsDisplayTokens
                     #[allow(unused_variables, deprecated, clippy::used_underscore_binding)]
-                    match #voidDeref self {
-                        #(#arms,)*
+                    match `#`voidDeref self {
+                        `#`(`#`arms,)*
                     }
                 }
             }
@@ -618,8 +618,8 @@ private fun implEnum(input: Enum): TokenStream {
             val fromFunction =
                 quote(
                     """
-            fn from(#sourceVar: #fromType) -> Self {
-                #ty::#variantIdent #body
+            fn from(`#`sourceVar: `#`fromType) -> Self {
+                `#`ty::`#`variantIdent `#`body
             }
             """,
                     mapOf("sourceVar" to sourceVar, "fromType" to fromType, "ty" to ty, "variantIdent" to variantIdent, "body" to body),
@@ -629,8 +629,8 @@ private fun implEnum(input: Enum): TokenStream {
                     span,
                     """
             #[automatically_derived]
-            impl #implGenerics ::core::convert::From<#fromType> for #ty #tyGenerics #whereClause {
-                #fromFunction
+            impl `#`implGenerics ::core::convert::From<`#`fromType> for `#`ty `#`tyGenerics `#`whereClause {
+                `#`fromFunction
             }
             """,
                     mapOf(
@@ -653,9 +653,9 @@ private fun implEnum(input: Enum): TokenStream {
             #[allow(
                 deprecated,
                 unused_qualifications,
-                #lintAllows
+                `#`lintAllows
             )]
-            #fromImplTokens
+            `#`fromImplTokens
             """,
                 mapOf("lintAllows" to lintAllows, "fromImplTokens" to fromImplTokens),
             )
@@ -672,12 +672,12 @@ private fun implEnum(input: Enum): TokenStream {
         """
         #[allow(unused_qualifications)]
         #[automatically_derived]
-        impl #implGenerics ::thiserror::#private::Error for #ty #tyGenerics #errorWhereClause {
-            #sourceMethod
-            #provideMethod
+        impl `#`implGenerics ::thiserror::`#`private::Error for `#`ty `#`tyGenerics `#`errorWhereClause {
+            `#`sourceMethod
+            `#`provideMethod
         }
-        #displayImpl
-        #(#fromImpls)*
+        `#`displayImpl
+        `#`(`#`fromImpls)*
         """,
         mapOf(
             "implGenerics" to implGenerics,
@@ -699,10 +699,10 @@ private fun fieldsPat(fields: List<Field>): TokenStream {
     if (fields.isEmpty()) return quote("{}")
     return if (fields[0].member is MemberUnraw.Named) {
         val members = fields.map { it.member }
-        quote("{ #(#members),* }", mapOf("members" to members))
+        quote("{ `#`(`#`members),* }", mapOf("members" to members))
     } else {
         val vars = fields.mapIndexed { index, _ -> formatIdent("_{}", index) }
-        quote("( #(#vars),* )", mapOf("vars" to vars))
+        quote("( `#`(`#`vars),* )", mapOf("vars" to vars))
     }
 }
 
@@ -710,7 +710,7 @@ private fun useAsDisplay(needsAsDisplay: Boolean): TokenStream? =
     if (needsAsDisplay) {
         val privateIdent = Private
         quote(
-            "use ::thiserror::#private::AsDisplay as _;",
+            "use ::thiserror::`#`private::AsDisplay as _;",
             mapOf("private" to privateIdent),
         )
     } else {
@@ -725,9 +725,9 @@ private fun fromInitializer(
     val fromMember = fromField.member
     val someSource =
         if (typeIsOption(fromField.ty)) {
-            quote("::core::option::Option::Some(#sourceVar)", mapOf("sourceVar" to sourceVar))
+            quote("::core::option::Option::Some(`#`sourceVar)", mapOf("sourceVar" to sourceVar))
         } else {
-            quote("#sourceVar", mapOf("sourceVar" to sourceVar))
+            quote("`#`sourceVar", mapOf("sourceVar" to sourceVar))
         }
     val privateIdent = Private
     val backtrace =
@@ -735,12 +735,12 @@ private fun fromInitializer(
             val backtraceMember = backtraceField.member
             if (typeIsOption(backtraceField.ty)) {
                 quote(
-                    "#backtraceMember: ::core::option::Option::Some(::thiserror::#private::Backtrace::capture()),",
+                    "`#`backtraceMember: ::core::option::Option::Some(::thiserror::`#`private::Backtrace::capture()),",
                     mapOf("backtraceMember" to backtraceMember, "private" to privateIdent),
                 )
             } else {
                 quote(
-                    "#backtraceMember: ::core::convert::From::from(::thiserror::#private::Backtrace::capture()),",
+                    "`#`backtraceMember: ::core::convert::From::from(::thiserror::`#`private::Backtrace::capture()),",
                     mapOf("backtraceMember" to backtraceMember, "private" to privateIdent),
                 )
             }
@@ -750,8 +750,8 @@ private fun fromInitializer(
     return quote(
         """
         {
-            #fromMember: #someSource,
-            #backtrace
+            `#`fromMember: `#`someSource,
+            `#`backtrace
         }
         """,
         mapOf("fromMember" to fromMember, "someSource" to someSource, "backtrace" to backtrace),
@@ -762,7 +762,7 @@ public fun typeIsOption(ty: SynType): Boolean = typeParameterOfOption(ty) != nul
 
 public fun unoptionalType(ty: SynType): TokenStream {
     val unoptional = typeParameterOfOption(ty) ?: ty
-    return quote("#unoptional", mapOf("unoptional" to unoptional))
+    return quote("`#`unoptional", mapOf("unoptional" to unoptional))
 }
 
 public fun typeParameterOfOption(ty: SynType): SynType? {

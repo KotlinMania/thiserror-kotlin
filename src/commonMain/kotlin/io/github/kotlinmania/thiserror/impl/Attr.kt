@@ -120,9 +120,9 @@ public class Display(
 
         val write =
             if (requiresFmtMachinery) {
-                quote("::core::write!(__formatter, #fmt #args)", mapOf("fmt" to fmt, "args" to args))
+                quote("::core::write!(__formatter, `#`fmt `#`args)", mapOf("fmt" to fmt, "args" to args))
             } else {
-                quote("__formatter.write_str(#fmt)", mapOf("fmt" to fmt))
+                quote("__formatter.write_str(`#`fmt)", mapOf("fmt" to fmt))
             }
 
         if (bindings.isEmpty()) {
@@ -132,8 +132,8 @@ public class Display(
             val values = bindings.map { it.expr }
             quote(
                 """
-                match (#(#values,)*) {
-                    (#(#locals,)*) => #write
+                match (`#`(`#`values,)*) {
+                    (`#`(`#`locals,)*) => `#`write
                 }
                 """,
                 mapOf("values" to values, "locals" to locals, "write" to write),
@@ -158,7 +158,7 @@ public enum class Trait(
 
     override fun toTokens(tokens: TokenStream) {
         val ident = Ident.new(traitName, Span.callSite())
-        val code = quote("::core::fmt::#ident", mapOf("ident" to ident))
+        val code = quote("::core::fmt::`#`ident", mapOf("ident" to ident))
         code.toTokens(tokens)
     }
 }

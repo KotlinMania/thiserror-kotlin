@@ -17,18 +17,18 @@ public fun expandFallback(input: DeriveInput, error: SynError): TokenStream {
 
     return quote(
         """
-        #errorCompiled
+        `#`errorCompiled
 
         #[allow(unused_qualifications)]
         #[automatically_derived]
-        impl #implGenerics ::thiserror::#private::Error for #ty #tyGenerics #whereClause
+        impl `#`implGenerics ::thiserror::`#`private::Error for `#`ty `#`tyGenerics `#`whereClause
         where
-            for<'workaround> #ty #tyGenerics: ::core::fmt::Debug,
+            for<'workaround> `#`ty `#`tyGenerics: ::core::fmt::Debug,
         {}
 
         #[allow(unused_qualifications)]
         #[automatically_derived]
-        impl #implGenerics ::core::fmt::Display for #ty #tyGenerics #whereClause {
+        impl `#`implGenerics ::core::fmt::Display for `#`ty `#`tyGenerics `#`whereClause {
             fn fmt(&self, __formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
                 ::core::unreachable!()
             }

@@ -197,9 +197,9 @@ internal fun Display.tryExpandShorthand(fields: List<Field>, container: Containe
         val private = Private
         val wrappedBindingValue =
             if (bonusDisplay) {
-                quoteSpanned(span, "#bindingValue.as_display()", mapOf("bindingValue" to bindingValue))
+                quoteSpanned(span, "`#`bindingValue.as_display()", mapOf("bindingValue" to bindingValue))
             } else if (bound == Trait.Pointer) {
-                quote("::thiserror::#private::Var(#bindingValue)", mapOf("private" to private, "bindingValue" to bindingValue))
+                quote("::thiserror::`#`private::Var(`#`bindingValue)", mapOf("private" to private, "bindingValue" to bindingValue))
             } else {
                 TokenStream.fromTokenTree(TokenTree.Ident(bindingValue))
             }
