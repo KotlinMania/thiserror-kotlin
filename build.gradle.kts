@@ -1877,7 +1877,7 @@ val androidPublicationBundle = tasks.register<Zip>("androidPublicationBundle") {
         include("$coordinatePath-android/${root.version}/**")
     }
     if (externalRoot == null) {
-        val hasAppleTargets = kotlin.targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>()
+        val hasAppleTargets = kotlin.targets.withType<KotlinNativeTarget>()
             .any { it.konanTarget.family.isAppleFamily }
         check(!hasAppleTargets || providers.systemProperty("os.name").get().startsWith("Mac")) {
             "Stage the real KMP root on macOS, then set project.publication.android.rootStagingDirectory and expectedRootHead"
@@ -1961,7 +1961,7 @@ val verifyPublicationPins = tasks.register<Exec>("verifyPublicationPins") {
         // Public Gradle configuration dependency APIs retain direct and catalog bundle declarations.
         for (name in listOf("commonMainApi", "commonMainImplementation")) {
             for (dependency in configurations.getByName(name).dependencies) {
-                check(dependency is org.gradle.api.artifacts.ExternalModuleDependency) {
+                check(dependency is ExternalModuleDependency) {
                     "Unsupported common dependency layout in $name; review publication pins explicitly"
                 }
                 val key = "${dependency.group}:${dependency.name}"
