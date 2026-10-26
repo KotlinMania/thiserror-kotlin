@@ -1,10 +1,9 @@
 # Serialization follows the upstream dependency contract
 
-The canonical template does not apply the Kotlinx serialization compiler plugin
-or put Kotlinx serialization core/JSON in its default common dependency bundle.
-The catalog retains their existing aliases and version for justified, explicit
-project use. An unused catalog entry adds no library or compiler plugin to a build.
-The template also adds no automatic Serde dependency. Datetime remains an explicit
+The canonical template contains no Kotlinx serialization compiler plugin alias,
+library aliases, or version pin. Projects use `serde-kotlin` and
+`serde-json-kotlin` when their selected features require serialization or JSON.
+The template adds no automatic Serde dependency. Datetime remains an explicit
 opt-in: the currently pinned published kotlinx-datetime 0.8.0 declares Kotlinx
 serialization core transitively. Its catalog alias/version are retained, while it
 is excluded from the default bundle so that indirect serialization is not injected.
@@ -35,16 +34,6 @@ tested Kotlin/platform accommodation. Preserve commonMain inheritance and justif
 platform-specific scopes. Use `api` for types exposed in public signatures; keep
 implementation details private. Publication guards must check the selected versions
 and actual POM target modules without making every private dependency public.
-
-## Explicit Kotlinx use
-
-A project that genuinely needs Kotlinx serialization may explicitly apply
-`alias(libs.plugins.kotlin.serialization)` and declare the required core/JSON aliases
-in its reviewed source set or project-specific bundle. Apply the compiler plugin
-only when the actual code requires its code generation. Keep the existing catalog
-pins; adding an alias to the catalog alone is not an opt-in. Record why this use is
-needed and how it relates to the upstream behavior. Do not restore these choices to
-the template's default bundle merely to make a project build.
 
 ## Existing libraries
 

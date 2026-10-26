@@ -60,34 +60,40 @@ class SerializationDefaultsTests(unittest.TestCase):
     def test_default_build_does_not_apply_serialization_plugin(self):
         self.assertEqual(serialization_plugin_applications(BUILD_TEXT, CATALOG), [])
 
-    def test_default_bundle_excludes_known_datetime_serialization_path(self):
-        selected = CATALOG['bundles'][PROPERTIES['project.dependencies.commonMainBundle']]
+    def test_datetime_opt_in_is_excluded_from_template_defaults(self):
+        # Existing projects select their own features; only the reusable template
+        # bundle must exclude this known transitive serialization dependency.
+        selected = CATALOG['bundles'].get('template-commonMain', [])
         modules = {CATALOG['libraries'][alias]['module'] for alias in selected}
         self.assertNotIn('org.jetbrains.kotlinx:kotlinx-datetime', modules)
         self.assertEqual(CATALOG['libraries']['kotlinx-datetime']['module'], 'org.jetbrains.kotlinx:kotlinx-datetime')
 
-    def test_unused_catalog_opt_ins_keep_real_modules_and_version(self):
-        self.assertEqual(CATALOG['plugins']['kotlin-serialization']['id'], PLUGIN_ID)
-        for kind in ['core', 'json']:
-            entry = CATALOG['libraries']['kotlinx-serialization-' + kind]
-            self.assertEqual(entry['module'], 'org.jetbrains.kotlinx:kotlinx-serialization-' + kind)
-            self.assertIn(entry['version']['ref'], CATALOG['versions'])
-        self.assertEqual(default_serialization_dependencies(CATALOG), [])
+    def test_catalog_does_not_offer_kotlinx_serialization_defaults(self):
+        self.assertNotIn('serialization', CATALOG['versions'])
+        self.assertNotIn(PLUGIN_ID, [plugin['id'] for plugin in CATALOG['plugins'].values()])
+        for entry in CATALOG['libraries'].values():
+            module = entry['module'] if isinstance(entry, dict) else ':'.join(entry.split(':')[:2])
+            self.assertFalse(module.startswith('org.jetbrains.kotlinx:kotlinx-serialization-'))
 
     def test_renamed_alias_cannot_hide_automatic_core_or_json(self):
         for kind in ['core', 'json']:
             catalog = copy.deepcopy(CATALOG)
-            catalog['libraries']['wire-codec'] = copy.deepcopy(catalog['libraries']['kotlinx-serialization-' + kind])
+            catalog['libraries']['wire-codec'] = {
+                'module': 'org.jetbrains.kotlinx:kotlinx-serialization-' + kind,
+                'version': '1.0.0',
+            }
             catalog['bundles'][PROPERTIES['project.dependencies.commonMainBundle']].append('wire-codec')
             self.assertEqual(default_serialization_dependencies(catalog), ['org.jetbrains.kotlinx:kotlinx-serialization-' + kind])
 
     def test_plugin_reintroduction_detected_for_catalog_and_direct_dsl(self):
+        catalog = copy.deepcopy(CATALOG)
+        catalog['plugins']['kotlin-serialization'] = {'id': PLUGIN_ID, 'version': '1.0.0'}
         ts = tokens(BUILD_TEXT)
         _, end = block(ts, ['plugins', '{'])
         for application in ['alias(libs.plugins.kotlin.serialization)',
                             'id("org.jetbrains.kotlin.plugin.serialization")', 'kotlin("plugin.serialization")']:
             build = BUILD_TEXT[:ts[end][1]] + application + '\n' + BUILD_TEXT[ts[end][1]:]
-            self.assertEqual(serialization_plugin_applications(build, CATALOG), [PLUGIN_ID])
+            self.assertEqual(serialization_plugin_applications(build, catalog), [PLUGIN_ID])
 
     def test_comment_and_literal_examples_are_not_plugin_applications(self):
         ts = tokens(BUILD_TEXT)
