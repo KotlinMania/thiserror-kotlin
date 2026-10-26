@@ -11,6 +11,7 @@ import io.github.kotlinmania.syn.Fields
 import io.github.kotlinmania.syn.Generics
 import io.github.kotlinmania.syn.Index
 import io.github.kotlinmania.syn.SynError
+import io.github.kotlinmania.syn.SynResult
 import io.github.kotlinmania.syn.SynType
 import io.github.kotlinmania.syn.Field as SynField
 import io.github.kotlinmania.syn.Variant as SynVariant
@@ -26,10 +27,13 @@ public sealed class Input {
 
     public companion object {
         public fun fromSyn(node: DeriveInput): Input =
+            tryFromSyn(node).getOrThrow()
+
+        internal fun tryFromSyn(node: DeriveInput): SynResult<Input> =
             when (val data = node.data) {
-                is Data.Struct -> StructInput(Struct.fromSyn(node, data.value))
-                is Data.Enum -> EnumInput(Enum.fromSyn(node, data.value))
-                is Data.Union -> throw SynError.newSpanned(node, "union as errors are not supported")
+                is Data.Struct -> Struct.tryFromSyn(node, data.value).map { StructInput(it) }
+                is Data.Enum -> Enum.tryFromSyn(node, data.value).map { EnumInput(it) }
+                is Data.Union -> SynResult.failure(SynError.newSpanned(node, "union as errors are not supported"))
             }
     }
 }
@@ -41,20 +45,25 @@ public class Struct(
     public val fields: List<Field>,
 ) {
     public companion object {
-        public fun fromSyn(node: DeriveInput, data: DataStruct): Struct {
-            val attrs = getAttrs(node.attrs).getOrThrow()
+        public fun fromSyn(node: DeriveInput, data: DataStruct): Struct =
+            tryFromSyn(node, data).getOrThrow()
+
+        internal fun tryFromSyn(node: DeriveInput, data: DataStruct): SynResult<Struct> {
+            val attrs = getAttrs(node.attrs).getOrElse { return SynResult.failure(it) }
             val scope = ParamsInScope(node.generics)
-            val fields = Field.multipleFromSyn(data.fields, scope)
+            val fields = Field.tryMultipleFromSyn(data.fields, scope).getOrElse { return SynResult.failure(it) }
             val display = attrs.display
             if (display != null) {
                 val container = ContainerKind.fromStruct(data)
-                display.expandShorthand(fields, container)
+                display.tryExpandShorthand(fields, container).getOrElse { return SynResult.failure(it) }
             }
-            return Struct(
-                attrs = attrs,
-                ident = node.ident,
-                generics = node.generics,
-                fields = fields,
+            return SynResult.success(
+                Struct(
+                    attrs = attrs,
+                    ident = node.ident,
+                    generics = node.generics,
+                    fields = fields,
+                ),
             )
         }
     }
@@ -67,12 +76,15 @@ public class Enum(
     public val variants: List<Variant>,
 ) {
     public companion object {
-        public fun fromSyn(node: DeriveInput, data: DataEnum): Enum {
-            val attrs = getAttrs(node.attrs).getOrThrow()
+        public fun fromSyn(node: DeriveInput, data: DataEnum): Enum =
+            tryFromSyn(node, data).getOrThrow()
+
+        internal fun tryFromSyn(node: DeriveInput, data: DataEnum): SynResult<Enum> {
+            val attrs = getAttrs(node.attrs).getOrElse { return SynResult.failure(it) }
             val scope = ParamsInScope(node.generics)
             val variants =
                 data.variants.toList().map { variantNode ->
-                    val variant = Variant.fromSyn(variantNode, scope)
+                    val variant = Variant.tryFromSyn(variantNode, scope).getOrElse { return SynResult.failure(it) }
                     if (variant.attrs.display == null && variant.attrs.transparent == null && variant.attrs.fmt == null) {
                         variant.attrs.display = attrs.display?.copy()
                         variant.attrs.transparent = attrs.transparent
@@ -81,15 +93,17 @@ public class Enum(
                     val display = variant.attrs.display
                     if (display != null) {
                         val container = ContainerKind.fromVariant(variantNode)
-                        display.expandShorthand(variant.fields, container)
+                        display.tryExpandShorthand(variant.fields, container).getOrElse { return SynResult.failure(it) }
                     }
                     variant
                 }
-            return Enum(
-                attrs = attrs,
-                ident = node.ident,
-                generics = node.generics,
-                variants = variants,
+            return SynResult.success(
+                Enum(
+                    attrs = attrs,
+                    ident = node.ident,
+                    generics = node.generics,
+                    variants = variants,
+                ),
             )
         }
     }
@@ -102,13 +116,19 @@ public class Variant(
     public val fields: List<Field>,
 ) {
     public companion object {
-        public fun fromSyn(node: SynVariant, scope: ParamsInScope): Variant {
-            val attrs = getAttrs(node.attrs).getOrThrow()
-            return Variant(
-                original = node,
-                attrs = attrs,
-                ident = node.ident,
-                fields = Field.multipleFromSyn(node.fields, scope),
+        public fun fromSyn(node: SynVariant, scope: ParamsInScope): Variant =
+            tryFromSyn(node, scope).getOrThrow()
+
+        internal fun tryFromSyn(node: SynVariant, scope: ParamsInScope): SynResult<Variant> {
+            val attrs = getAttrs(node.attrs).getOrElse { return SynResult.failure(it) }
+            val fields = Field.tryMultipleFromSyn(node.fields, scope).getOrElse { return SynResult.failure(it) }
+            return SynResult.success(
+                Variant(
+                    original = node,
+                    attrs = attrs,
+                    ident = node.ident,
+                    fields = fields,
+                ),
             )
         }
     }
@@ -123,26 +143,34 @@ public class Field(
 ) {
     public companion object {
         public fun multipleFromSyn(fields: Fields, scope: ParamsInScope): List<Field> =
-            fields
-                .iter()
-                .asSequence()
-                .mapIndexed { i, field ->
-                    fromSyn(i, field, scope)
-                }.toList()
+            tryMultipleFromSyn(fields, scope).getOrThrow()
 
-        public fun fromSyn(i: Int, node: SynField, scope: ParamsInScope): Field {
-            val attrs = getAttrs(node.attrs).getOrThrow()
+        internal fun tryMultipleFromSyn(fields: Fields, scope: ParamsInScope): SynResult<List<Field>> {
+            val parsed = mutableListOf<Field>()
+            for ((i, field) in fields.iter().withIndex()) {
+                parsed.add(tryFromSyn(i, field, scope).getOrElse { return SynResult.failure(it) })
+            }
+            return SynResult.success(parsed)
+        }
+
+        public fun fromSyn(i: Int, node: SynField, scope: ParamsInScope): Field =
+            tryFromSyn(i, node, scope).getOrThrow()
+
+        internal fun tryFromSyn(i: Int, node: SynField, scope: ParamsInScope): SynResult<Field> {
+            val attrs = getAttrs(node.attrs).getOrElse { return SynResult.failure(it) }
             val member =
                 when (val name = node.ident) {
                     null -> MemberUnraw.Unnamed(Index(i.toUInt(), Span.callSite()))
                     else -> MemberUnraw.Named(IdentUnraw.new(name))
                 }
-            return Field(
-                original = node,
-                attrs = attrs,
-                member = member,
-                ty = node.ty,
-                containsGeneric = scope.intersects(node.ty),
+            return SynResult.success(
+                Field(
+                    original = node,
+                    attrs = attrs,
+                    member = member,
+                    ty = node.ty,
+                    containsGeneric = scope.intersects(node.ty),
+                ),
             )
         }
     }

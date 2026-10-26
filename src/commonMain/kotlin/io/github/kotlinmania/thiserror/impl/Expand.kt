@@ -11,24 +11,22 @@ import io.github.kotlinmania.syn.DeriveInput
 import io.github.kotlinmania.syn.GenericArgument
 import io.github.kotlinmania.syn.GenericParam
 import io.github.kotlinmania.syn.PathArguments
-import io.github.kotlinmania.syn.SynError
+import io.github.kotlinmania.syn.SynResult
 import io.github.kotlinmania.syn.SynType
 import io.github.kotlinmania.syn.token.SelfType
 
 public fun derive(input: DeriveInput): TokenStream =
-    try {
-        tryExpand(input)
-    } catch (error: SynError) {
-        expandFallback(input, error)
-    }
+    tryExpand(input).getOrElse { expandFallback(input, it) }
 
-private fun tryExpand(input: DeriveInput): TokenStream {
-    val astInput = Input.fromSyn(input)
-    astInput.validate()
-    return when (astInput) {
-        is Input.StructInput -> implStruct(astInput.struct)
-        is Input.EnumInput -> implEnum(astInput.enumVal)
-    }
+private fun tryExpand(input: DeriveInput): SynResult<TokenStream> {
+    val astInput = Input.tryFromSyn(input).getOrElse { return SynResult.failure(it) }
+    astInput.tryValidate().getOrElse { return SynResult.failure(it) }
+    return SynResult.success(
+        when (astInput) {
+            is Input.StructInput -> implStruct(astInput.struct)
+            is Input.EnumInput -> implEnum(astInput.enumVal)
+        },
+    )
 }
 
 private fun implStruct(input: Struct): TokenStream {

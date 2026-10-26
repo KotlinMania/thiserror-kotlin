@@ -24,6 +24,10 @@ import io.github.kotlinmania.syn.parseAny
 import io.github.kotlinmania.syn.peekAny
 
 public fun Display.expandShorthand(fields: List<Field>, container: ContainerKind) {
+    tryExpandShorthand(fields, container).getOrThrow()
+}
+
+internal fun Display.tryExpandShorthand(fields: List<Field>, container: ContainerKind): SynResult<Unit> {
     val rawArgs = this.args
     val fmtArgs = explicitNamedArgs(rawArgs)
 
@@ -58,7 +62,7 @@ public fun Display.expandShorthand(fields: List<Field>, container: ContainerKind
             read = read.substring(1)
             continue
         }
-        val next = read.firstOrNull() ?: return
+        val next = read.firstOrNull() ?: return SynResult.success(Unit)
         val member =
             when (next) {
                 in '0'..'9' -> {
@@ -68,10 +72,10 @@ public fun Display.expandShorthand(fields: List<Field>, container: ContainerKind
                         val firstUnnamed = fmtArgs.firstUnnamed
                         if (firstUnnamed != null) {
                             val msg = "ambiguous reference to positional arguments by number in a $container; change this to a named argument"
-                            throw SynError.newSpanned(firstUnnamed, msg)
+                            return SynResult.failure(SynError.newSpanned(firstUnnamed, msg))
                         }
                     }
-                    val indexInt = intStr.toUIntOrNull() ?: return
+                    val indexInt = intStr.toUIntOrNull() ?: return SynResult.success(Unit)
                     MemberUnraw.Unnamed(Index(indexInt, span))
                 }
 
@@ -103,7 +107,7 @@ public fun Display.expandShorthand(fields: List<Field>, container: ContainerKind
             }
 
         val endSpec = read.indexOf('}')
-        if (endSpec == -1) return
+        if (endSpec == -1) return SynResult.success(Unit)
         var bonusDisplay = false
         val spec = read.substring(0, endSpec)
         val bound =
@@ -208,6 +212,7 @@ public fun Display.expandShorthand(fields: List<Field>, container: ContainerKind
     this.infiniteRecursive = infiniteRecursive
     this.impliedBounds = impliedBounds
     this.bindings = bindings
+    return SynResult.success(Unit)
 }
 
 private class FmtArguments(
