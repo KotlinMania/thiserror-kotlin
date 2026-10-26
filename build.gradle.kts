@@ -4,6 +4,7 @@ import groovy.json.JsonSlurper
 import org.gradle.api.GradleException
 import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.api.publish.maven.tasks.AbstractPublishToMaven
 import org.gradle.api.publish.maven.tasks.PublishToMavenRepository
 import org.gradle.api.tasks.testing.AbstractTestTask
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
@@ -914,10 +915,10 @@ kotlin {
         // package. The project.ffi.* switches decide whether they compile, the
         // same way they gate the C/JNI/N-API builds.
         if (!napiFfiEnabled) {
-            jsMain { kotlin.exclude("io/github/kotlinmania/thiserror/**") }
+            jsMain { csvProperty("project.ffi.napi.kotlinExcludes").forEach { kotlin.exclude(it) } }
         }
         if (!jvmFfiEnabled) {
-            jvmMain { kotlin.exclude("io/github/kotlinmania/thiserror/internal/**") }
+            jvmMain { csvProperty("project.ffi.jvm.kotlinExcludes").forEach { kotlin.exclude(it) } }
         }
         commonMain.dependencies {
             implementation(commonMainDependencyBundle)
@@ -966,6 +967,7 @@ if (benchmarkEnabled) {
 // Test logging
 // ============================================================================
 tasks.withType<AbstractTestTask>().configureEach {
+    ignoreFailures = false
     testLogging {
         events(
             TestLogEvent.STARTED,
@@ -1105,6 +1107,11 @@ rootProject.extensions.configure<YarnRootExtension>("kotlinYarn") {
     resolution("**/webpack", webpackVersion)
 }
 
+tasks.named("rootPackageJson") {
+    inputs.property("yarnResolutions", providers.gradlePropertiesPrefixedBy("yarn.resolution."))
+    inputs.property("webpackVersion", webpackVersion)
+}
+
 val patchedKarmaWebpackPackage =
     rootProject.layout.projectDirectory
         .dir("gradle/npm/karma-webpack")
@@ -1209,6 +1216,8 @@ publishing {
                     name.set("Sydney Renee")
                     email.set("sydney@solace.ofharmony.ai")
                     url.set("https://github.com/sydneyrenee")
+                    organization.set("KotlinMania")
+                    organizationUrl.set("https://github.com/KotlinMania")
                 }
             }
             scm {
@@ -1792,6 +1801,52 @@ val fullTargetBuildTaskNames =
 
 tasks.named("build") {
     dependsOn(fullTargetBuildTaskNames)
+}
+
+val publicationCompilationTasks =
+    kotlin.targets
+        .filter { it.name != "metadata" }
+        .flatMap { target -> target.compilations.map { it.compileTaskProvider } }
+
+val compileAllTargets =
+    tasks.register("compileAllTargets") {
+        group = "verification"
+        description = "Compiles main and test sources for every declared target."
+        dependsOn(publicationCompilationTasks)
+        doLast {
+            val skippedCompilations =
+                publicationCompilationTasks.map { it.get() }.filter { task ->
+                    !task.state.executed ||
+                        (task.state.skipped && !task.state.upToDate && task.state.skipMessage != "FROM-CACHE")
+                }
+            check(skippedCompilations.isEmpty()) {
+                "Required target compilations did not complete: " +
+                    skippedCompilations.joinToString { "${it.path} (${it.state.skipMessage ?: "not executed"})" }
+            }
+        }
+    }
+
+val publicationPomChecks =
+    publishing.publications.withType<MavenPublication>().map { publication ->
+        tasks.named("checkPomFileFor${publication.name.replaceFirstChar { it.uppercase() }}Publication")
+    }
+
+val checkPublicationPoms =
+    tasks.register("checkPublicationPoms") {
+        group = "verification"
+        description = "Checks the generated POM for every Maven publication."
+        dependsOn(publicationPomChecks)
+    }
+
+val publicationCheck =
+    tasks.register("publicationCheck") {
+        group = "verification"
+        description = "Builds every target, runs tests and checks every POM before Maven publication."
+        dependsOn("build", compileAllTargets, checkPublicationPoms)
+    }
+
+tasks.withType<AbstractPublishToMaven>().configureEach {
+    dependsOn(publicationCheck)
 }
 
 tasks.register("classes") {

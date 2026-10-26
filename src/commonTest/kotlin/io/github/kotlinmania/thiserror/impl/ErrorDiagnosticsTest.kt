@@ -141,7 +141,8 @@ class ErrorDiagnosticsTest {
             }
         assertEquals(message, diagnostic.message)
         assertEquals(highlighted, diagnostic.span().sourceText())
-        assertEquals(source.lastIndexOf(highlighted), diagnostic.span().sourceUtf16Range()?.first)
+        assertEquals(1, diagnostic.span().start().line)
+        assertEquals(source.lastIndexOf(highlighted), diagnostic.span().start().column)
 
         val expanded = derive(parseInput(source))
         val expectedTokens = diagnostic.toCompileError().toList()
