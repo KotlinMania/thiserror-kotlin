@@ -246,9 +246,9 @@ or the existing workspace `bin/ast_distance` when the local tool is unavailable:
 
 ```sh
 # Execute from the existing library checkout with explicit source/target paths.
-tools/ast_distance --deep tmp/libc/src rust src/commonMain/kotlin/io/github/kotlinmania/libc kotlin
-tools/ast_distance --symbol-parity tmp/libc/src src/commonMain/kotlin/io/github/kotlinmania/libc --kind function
-tools/ast_distance --compare-functions tmp/libc/src/macros.rs rust src/commonTest/kotlin/io/github/kotlinmania/libc/MacrosTest.kt kotlin
+tools/ast_distance --deep tmp/libc/src rust src/common/commonMain/kotlin/io/github/kotlinmania/libc kotlin
+tools/ast_distance --symbol-parity tmp/libc/src src/common/commonMain/kotlin/io/github/kotlinmania/libc --kind function
+tools/ast_distance --compare-functions tmp/libc/src/macros.rs rust src/common/commonTest/kotlin/io/github/kotlinmania/libc/MacrosTest.kt kotlin
 ```
 
 Record the binary/configuration hashes, exact commands, upstream revision,

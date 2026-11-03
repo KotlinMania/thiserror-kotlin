@@ -1,17 +1,40 @@
 pluginManagement {
-    val mavenProperties = java.util.Properties().apply {
-        val source = settingsDir.resolve("maven.properties")
-        require(source.isFile) { "Missing Maven mode configuration: $source" }
-        source.inputStream().use { load(it) }
+    val mavenProperties =
+        java.util.Properties().apply {
+            val source = settingsDir.resolve("maven.properties")
+            if (source.isFile) {
+                source.inputStream().use { load(it) }
+            }
+        }
+    val cliMavenLocal =
+        providers
+            .gradleProperty("project.repositories.mavenLocal")
+            .map { it.trim().toBoolean() }
+            .orNull
+    val fileMavenLocal = mavenProperties.getProperty("maven.local")?.trim()?.toBooleanStrictOrNull()
+    val localMaven = cliMavenLocal ?: fileMavenLocal ?: false
+    val explicitRepoLocal =
+        providers
+            .systemProperty("maven.repo.local")
+            .orNull
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+    val localRepository =
+        if (explicitRepoLocal != null) {
+            File(explicitRepoLocal)
+        } else {
+            mavenProperties
+                .getProperty("maven.localRepository")
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { File(it) }
+                ?: File(System.getProperty("user.home"), ".m2/repository")
+        }
+    require(localRepository.isAbsolute) {
+        "maven.localRepository / maven.repo.local must be an absolute path: $localRepository"
     }
-    val localMaven = mavenProperties.getProperty("maven.local")?.trim()?.toBooleanStrictOrNull()
-    require(localMaven != null) { "maven.properties must set maven.local=true or false" }
-    val localRepository = mavenProperties.getProperty("maven.localRepository")
-        ?.trim()?.takeIf { it.isNotEmpty() }?.let { File(it) }
-        ?: File(System.getProperty("user.home"), ".m2/repository")
-    require(localRepository.isAbsolute) { "maven.localRepository must be an absolute path" }
 
-    // Gradle's Maven resolver and publishToMavenLocal use this same location.
+    // Gradle's Maven resolver and publishToMavenLocal share this repository path.
     System.setProperty("maven.repo.local", localRepository.absolutePath)
     settings.extra["mavenLocalEnabled"] = localMaven
 
@@ -28,7 +51,7 @@ plugins { id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 val localMavenEnabled = extra["mavenLocalEnabled"] as Boolean
 
 dependencyResolutionManagement {
-    // Kotlin tool setup temporarily adds and removes its Node/Yarn Ivy repositories.
+    // Kotlin tool setup temporarily adds and removes its Node/Yarn/Binaryen Ivy repositories.
     repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
     repositories {
         if (localMavenEnabled) mavenLocal()

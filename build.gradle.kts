@@ -33,7 +33,9 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
 import java.util.Base64
+import java.util.Properties
 import java.util.UUID
 import java.util.zip.ZipInputStream
 
@@ -48,17 +50,31 @@ plugins {
     signing
 }
 
+// The Swift bridge uses a verified header-only SDK repair. Keep its compilation
+// outputs separate from the ordinary Native build that uses the installed SDK.
+if (providers.gradleProperty("project.swift.isolatedBuild").map { it.toBooleanStrict() }.getOrElse(false)) {
+    layout.buildDirectory.set(layout.projectDirectory.dir("build/swift-export"))
+}
+
 group = providers.gradleProperty("project.group").getOrElse("io.github.kotlinmania")
 version = providers.gradleProperty("project.version").getOrElse("0.1.0-SNAPSHOT")
 val frameworkName = providers.gradleProperty("project.frameworkName").getOrElse("Unnamed")
 val projectNamespace = providers.gradleProperty("project.namespace").getOrElse("io.github.kotlinmania")
 val kotlinVersion = providers.gradleProperty("versions.kotlin").getOrElse("2.4.0")
 // kotlinmania:common-api-bundle:v1 begin
-val commonMainApiDependencyBundle = providers.gradleProperty("project.dependencies.commonMainApiBundle")
-    .orNull?.trim()?.takeIf { it.isNotEmpty() }?.let { bundleName ->
-        extensions.getByType(VersionCatalogsExtension::class.java).named("libs")
-            .findBundle(bundleName).orElseThrow { GradleException("Missing public API bundle '$bundleName'") }
-    }
+val commonMainApiDependencyBundle =
+    providers
+        .gradleProperty("project.dependencies.commonMainApiBundle")
+        .orNull
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let { bundleName ->
+            extensions
+                .getByType(VersionCatalogsExtension::class.java)
+                .named("libs")
+                .findBundle(bundleName)
+                .orElseThrow { GradleException("Missing public API bundle '$bundleName'") }
+        }
 // kotlinmania:common-api-bundle:v1 end
 val commonMainBundleName = providers.gradleProperty("project.dependencies.commonMainBundle").get()
 val commonMainDependencyBundle =
@@ -110,9 +126,9 @@ val napiFfiEnabled = boolProperty("project.ffi.napi")
 val ffiNameRaw = providers.gradleProperty("project.ffi.name").getOrElse("Ffi").trim()
 val ffiName = ffiNameRaw.replaceFirstChar { it.uppercase() } // Libc, Png, ...
 val ffiNameLower = ffiNameRaw.lowercase() // libc, png, ...
-val ffiDefFile = "src/nativeInterop/cinterop/$ffiName.def"
+val ffiDefFile = "src/native/interop/cinterop/$ffiName.def"
 val ffiWrapperBase = "${ffiNameLower}_wrapper" // libc_wrapper
-val ffiNapiDir = "native/node-$ffiNameLower" // native/node-libc
+val ffiNapiDir = "src/js/node-$ffiNameLower/dist" // src/js/node-libc/dist
 val ffiNpmPackage = "@kotlinmania/$ffiNameLower-native-bindings" // @kotlinmania/libc-native-bindings
 
 if (nativeFfiEnabled || jvmFfiEnabled || napiFfiEnabled) {
@@ -143,9 +159,6 @@ val benchmarkWarmups = providers.gradleProperty("project.benchmark.warmups").map
 val benchmarkIterations = providers.gradleProperty("project.benchmark.iterations").map { it.toInt() }.getOrElse(5)
 val benchmarkIterationTime = providers.gradleProperty("project.benchmark.iterationTime").map { it.toLong() }.getOrElse(1L)
 val benchmarkIterationTimeUnit = providers.gradleProperty("project.benchmark.iterationTimeUnit").getOrElse("s")
-val intellijCoroutinesVersion =
-    providers.gradleProperty("versions.intellij.coroutines").getOrElse("1.10.2-intellij-1")
-
 val projectKonanDataDirectory =
     providers
         .environmentVariable("KONAN_DATA_DIR")
@@ -154,9 +167,9 @@ val projectKonanDataDirectory =
             File(it).absoluteFile
         }.orElse(providers.systemProperty("user.home").map { File(it, ".konan") })
 
-// KGP runs Swift Export in an isolated worker whose classpath is
-// `swiftExportClasspath`. Adding a dependency disables KGP's default
-// dependency population, so keep the default embeddable runner explicit too.
+// The repaired exporter is host tooling; its POM supplies the complete worker
+// classpath. Keep a single exporter provider, separate from product dependencies.
+val swiftExporterVersion = providers.gradleProperty("versions.swift.exporter").get()
 val projectDependencyHandler = project.dependencies
 configurations.configureEach {
     // proc-macro-kotlin's published Android artifact bundles the JetBrains
@@ -166,12 +179,62 @@ configurations.configureEach {
         exclude(group = "org.jetbrains", module = "annotations")
     }
     if (name == "swiftExportClasspath") {
-        dependencies.add(projectDependencyHandler.create("org.jetbrains.kotlin:swift-export-embeddable:$kotlinVersion"))
         dependencies.add(
             projectDependencyHandler.create(
-                "org.jetbrains.intellij.deps.kotlinx:kotlinx-coroutines-core-jvm:$intellijCoroutinesVersion",
+                "io.github.kotlinmania:swift-export-embeddable:$swiftExporterVersion",
             ),
         )
+    }
+}
+
+val swiftNativeSdkHelper =
+    configurations.create("swiftNativeSdkHelper") {
+        isCanBeConsumed = false
+        isTransitive = false
+        dependencies.add(
+            projectDependencyHandler.create(
+                "io.github.kotlinmania:swift-export-embeddable:$swiftExporterVersion:native-sdk-helper@zip",
+            ),
+        )
+    }
+
+tasks.matching { it.name.endsWith("DebugSwiftExport") || it.name.endsWith("ReleaseSwiftExport") }.configureEach {
+    doFirst {
+        val workerFiles = inputs.files.files.filter { it.extension == "jar" }
+        check(workerFiles.size == 16) { "Expected the reviewed 16-JAR Swift Export worker classpath" }
+        val exporters =
+            workerFiles
+                .filter { it.name.startsWith("swift-export-embeddable-") }
+        check(exporters.size == 1) { "Swift Export requires exactly one exporter provider" }
+        val digest =
+            MessageDigest
+                .getInstance("SHA-256")
+                .digest(exporters.single().readBytes())
+                .joinToString("") { "%02x".format(it) }
+        check(digest == providers.gradleProperty("project.swift.exporter.sha256").get()) {
+            "Swift exporter checksum does not match the reviewed published artifact"
+        }
+        val receipt =
+            layout.buildDirectory
+                .file("reports/swift-export/$name-worker.sha256")
+                .get()
+                .asFile
+        receipt.parentFile.mkdirs()
+        receipt.writeText(
+            workerFiles.sortedBy { it.name }.joinToString("\n", postfix = "\n") { jar ->
+                MessageDigest
+                    .getInstance("SHA-256")
+                    .digest(jar.readBytes())
+                    .joinToString("") { "%02x".format(it) } + "  " + jar.name
+            },
+        )
+    }
+}
+
+if (providers.gradleProperty("kotlin.native.home").isPresent) {
+    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeLink>().configureEach {
+        val cache = layout.buildDirectory.dir("native-auto-cache/$name")
+        toolOptions.freeCompilerArgs.add(cache.map { "-Xauto-cache-dir=${it.asFile.absolutePath}" })
     }
 }
 
@@ -270,12 +333,12 @@ fun sdkManagerCommand(vararg args: String): List<String> =
         listOf(androidSdkManager.absolutePath) + args
     }
 
-fun downloadAndroidCommandLineTools() {
-    val zipName = "commandlinetools-$androidSdkOsName-${androidCommandLineToolsRevision}_latest.zip"
+fun downloadAndroidCommandLineTools(sdkDirectory: File = projectAndroidSdkDir, packageOs: String = androidSdkOsName) {
+    val zipName = "commandlinetools-$packageOs-${androidCommandLineToolsRevision}_latest.zip"
     val url = "https://dl.google.com/android/repository/$zipName"
-    val tmpDir = projectAndroidSdkDir.resolve(".tmp/commandline-tools")
+    val tmpDir = sdkDirectory.resolve(".tmp/commandline-tools")
     val zipFile = tmpDir.resolve(zipName)
-    val latestDir = projectAndroidSdkDir.resolve("cmdline-tools/latest")
+    val latestDir = sdkDirectory.resolve("cmdline-tools/latest")
     println("setup-android-sdk: downloading $url")
     tmpDir.deleteRecursively()
     tmpDir.mkdirs()
@@ -299,13 +362,13 @@ fun downloadAndroidCommandLineTools() {
                     } else {
                         target.parentFile.mkdirs()
                         Files.copy(zipInput, target.toPath(), StandardCopyOption.REPLACE_EXISTING)
-                        if (!isWindowsHost && relativeName.startsWith("bin/")) target.setExecutable(true)
+                        if (packageOs != "win" && relativeName.startsWith("bin/")) target.setExecutable(true)
                     }
                 }
                 zipInput.closeEntry()
             }
         }
-        if (!isWindowsHost) androidSdkManager.setExecutable(true)
+        if (packageOs != "win") latestDir.resolve("bin/sdkmanager").setExecutable(true)
     } finally {
         tmpDir.deleteRecursively()
     }
@@ -383,6 +446,7 @@ writeAndroidLocalProperties()
 
 fun requestedTaskWantsAndroid(rawTaskName: String): Boolean {
     val taskName = rawTaskName.substringAfterLast(':')
+    if (taskName == "setupLocalAndroidX64Runtime") return false
     if (taskName.contains("AndroidNative", ignoreCase = true)) return false // Kotlin/Native, no SDK
     if (taskName.contains("Android", ignoreCase = true)) return true // direct AGP tasks
     return taskName in
@@ -455,7 +519,7 @@ kotlin {
 
     // Default hierarchy plus a named posix group: shared POSIX code for every
     // native target except mingw (Apple, Linux, Android Native) lives in
-    // src/posixMain and src/posixTest as real shared source sets.
+    // src/native/posix/posixMain and src/native/posix/posixTest as real shared source sets.
     applyDefaultHierarchyTemplate {
         common {
             group("native") {
@@ -568,13 +632,7 @@ kotlin {
                 browserTestExcludes.forEach { filter.excludeTestsMatching(it) }
             }
         }
-        nodejs {
-            testTask {
-                useMocha {
-                    timeout = "120s"
-                }
-            }
-        }
+        nodejs()
     }
 
     @OptIn(ExperimentalWasmDsl::class)
@@ -624,13 +682,13 @@ kotlin {
     // Kotlin/Native-downloaded toolchain, Linux via host clang or the konan
     // GCC cross-archive, MinGW via the konan msys2 toolchain). It then wires
     // the generated static library into the cinterop definition read from
-    // src/nativeInterop/cinterop/${ffiName}.def so the wrapper's function
+    // src/native/interop/cinterop/${ffiName}.def so the wrapper's function
     // bodies are available to the Kotlin bindings as `import ${ffiNameLower}.*`.
     //
     // Host-capability fallbacks: if the cross toolchain for a target is not
     // installed on this host (e.g. linuxArm64 from macOS without the GCC
     // archive downloaded), the task falls back to a pre-built archive at
-    // src/nativeInterop/cinterop/targets/<konan_target>/${ffiWrapperBase}.a,
+    // src/native/interop/cinterop/targets/<konan_target>/${ffiWrapperBase}.a,
     // and fails loudly if neither is available.
     // ========================================================================
     if (nativeFfiEnabled) {
@@ -677,252 +735,257 @@ kotlin {
         check(nativeFfiTargetNames.all { it in configuredNativeTargets }) {
             "Unknown project.ffi.native.targets: ${nativeFfiTargetNames - configuredNativeTargets}"
         }
-        targets.withType<KotlinNativeTarget>().matching {
-            nativeFfiTargetNames.isEmpty() || it.name in nativeFfiTargetNames
-        }.configureEach {
-            val konanTargetName = konanTarget.name
-            val targetCapitalized = name.replaceFirstChar { it.uppercase() }
-            val wrapperTaskName = "compile${ffiName}WrapperFor$targetCapitalized"
-            val wrapperTask = if (nativeFfiCompileWrapper) {
-                tasks.register(wrapperTaskName) {
-                    group = "build"
-                    description = "Compiles $ffiWrapperBase.c into a static library for $konanTargetName"
-                    val cSource = file("src/nativeInterop/cinterop/$ffiWrapperBase.c")
-                    val hSource = file("src/nativeInterop/cinterop/$ffiWrapperBase.h")
-                    val outDir =
-                        layout.buildDirectory
-                            .dir("cinterop-targets/$konanTargetName")
-                            .get()
-                            .asFile
-                    val outFile = File(outDir, "$ffiWrapperBase.a")
-                    inputs.file(cSource)
-                    inputs.file(hSource)
-                    if (konanTargetName.startsWith("linux")) {
-                        inputs.file("verification/verify_native_archive.py")
-                        outputs.file(File(outDir, "native-archive-verification.json"))
-                    }
-                    outputs.file(outFile)
-
-                    doLast {
-                        outDir.mkdirs()
-                        if (outFile.exists()) outFile.delete()
-                        if (konanTargetName.startsWith("linux")) File(outDir, "native-archive-verification.json").delete()
-                        val tempObj = File(outDir, "$ffiWrapperBase.o")
-                        val konanDeps =
-                            layout.buildDirectory
-                                .dir("native-wrapper-dependencies")
-                                .get()
-                                .asFile
-                        val isMac =
-                            org.gradle.internal.os.OperatingSystem
-                                .current()
-                                .isMacOsX
-                        val isLinux =
-                            org.gradle.internal.os.OperatingSystem
-                                .current()
-                                .isLinux
-                        val isWindows =
-                            org.gradle.internal.os.OperatingSystem
-                                .current()
-                                .isWindows
-                        val execOps = project.serviceOf<ExecOperations>()
-
-                        when {
-                            isMac &&
-                                (
-                                    konanTargetName.startsWith("macos") ||
-                                        konanTargetName.startsWith("ios") ||
-                                        konanTargetName.startsWith("tvos") ||
-                                        konanTargetName.startsWith("watchos")
-                                ) -> {
-                                val (appleTriple, sdkName) =
-                                    when (konanTargetName) {
-                                        "macos_arm64" -> "arm64-apple-macos14.0" to "macosx"
-                                        "macos_x64" -> "x86_64-apple-macos14.0" to "macosx"
-                                        "ios_arm64" -> "arm64-apple-ios14.0" to "iphoneos"
-                                        "ios_simulator_arm64" -> "arm64-apple-ios14.0-simulator" to "iphonesimulator"
-                                        "ios_x64" -> "x86_64-apple-ios14.0-simulator" to "iphonesimulator"
-                                        "watchos_device_arm64" -> "arm64-apple-watchos7.0" to "watchos"
-                                        "watchos_simulator_arm64" -> "arm64-apple-watchos7.0-simulator" to "watchsimulator"
-                                        "tvos_arm64" -> "arm64-apple-tvos14.0" to "appletvos"
-                                        "tvos_simulator_arm64" -> "arm64-apple-tvos14.0-simulator" to "appletvsimulator"
-                                        else -> "arm64-apple-macos14.0" to "macosx"
-                                    }
-                                execOps
-                                    .exec {
-                                        commandLine("xcrun", "-sdk", sdkName, "clang", "-target", appleTriple, "-Wall", "-Wextra", "-Werror", "-c", "-I${cSource.parent}", cSource.absolutePath, "-o", tempObj.absolutePath)
-                                    }.assertNormalExitValue()
-                                execOps
-                                    .exec {
-                                        commandLine("xcrun", "-sdk", sdkName, "ar", "rcs", outFile.absolutePath, tempObj.absolutePath)
-                                    }.assertNormalExitValue()
-                            }
-
-                            konanTargetName.startsWith("android") -> {
-                                val hostToolchain = if (isMac) "osx" else "linux"
-                                val ndkDir = ensureKonanDependency("target-toolchain-2-$hostToolchain-android_ndk", konanDeps, execOps)
-                                ensureKonanDependency("target-sysroot-1-android_ndk", konanDeps, execOps)
-                                val sysroot = File(ndkDir, "sysroot")
-                                val clangBin =
-                                    if (konanTargetName.contains("arm64")) {
-                                        File(ndkDir, "bin/aarch64-linux-android21-clang")
-                                    } else {
-                                        File(ndkDir, "bin/x86_64-linux-android21-clang")
-                                    }
-                                val arBin =
-                                    if (konanTargetName.contains("arm64")) {
-                                        File(ndkDir, "bin/aarch64-linux-android-ar")
-                                    } else {
-                                        File(ndkDir, "bin/x86_64-linux-android-ar")
-                                    }
-                                if (clangBin.exists() && sysroot.exists()) {
-                                    execOps
-                                        .exec {
-                                            commandLine(clangBin.absolutePath, "--sysroot=${sysroot.absolutePath}", "-Wall", "-Wextra", "-Werror", "-c", "-I${cSource.parent}", cSource.absolutePath, "-o", tempObj.absolutePath)
-                                        }.assertNormalExitValue()
-                                    execOps
-                                        .exec {
-                                            commandLine(arBin.absolutePath, "rcs", outFile.absolutePath, tempObj.absolutePath)
-                                        }.assertNormalExitValue()
-                                } else {
-                                    val prebuilt = file("src/nativeInterop/cinterop/targets/$konanTargetName/$ffiWrapperBase.a")
-                                    val fallbackPrebuilt = file("src/nativeInterop/cinterop/$ffiWrapperBase.a")
-                                    if (prebuilt.exists()) {
-                                        prebuilt.copyTo(outFile, overwrite = true)
-                                    } else if (fallbackPrebuilt.exists()) {
-                                        fallbackPrebuilt.copyTo(outFile, overwrite = true)
-                                    }
-                                }
-                            }
-
-                            konanTargetName.startsWith("linux") -> {
-                                val (targetTriple, gccDirName) =
-                                    if (konanTargetName.contains("arm64")) {
-                                        "aarch64-unknown-linux-gnu" to "aarch64-unknown-linux-gnu-gcc-8.3.0-glibc-2.25-kernel-4.9-2"
-                                    } else {
-                                        "x86_64-unknown-linux-gnu" to "x86_64-unknown-linux-gnu-gcc-8.3.0-glibc-2.19-kernel-4.9-2"
-                                    }
-                                if (isLinux) {
-                                    val gccDirectory = ensureKonanDependency(gccDirName, konanDeps, execOps)
-                                    val sysroot = File(gccDirectory, "$targetTriple/sysroot")
-                                    require(sysroot.isDirectory) { "Missing target sysroot for $konanTargetName: $sysroot" }
-                                    execOps
-                                        .exec {
-                                            commandLine("clang", "--target=$targetTriple", "--sysroot=${sysroot.absolutePath}", "-fPIC", "-Wall", "-Wextra", "-Werror", "-c", "-I${cSource.parent}", cSource.absolutePath, "-o", tempObj.absolutePath)
-                                        }.assertNormalExitValue()
-                                    execOps
-                                        .exec {
-                                            commandLine("ar", "rcs", outFile.absolutePath, tempObj.absolutePath)
-                                        }.assertNormalExitValue()
-                                } else if (isMac) {
-                                    val gccDirectory = ensureKonanDependency(gccDirName, konanDeps, execOps)
-                                    val ndkDirectory = ensureKonanDependency("target-toolchain-2-osx-android_ndk", konanDeps, execOps)
-                                    val sysroot = File(gccDirectory, "$targetTriple/sysroot")
-                                    val llvmAr = File(ndkDirectory, "bin/llvm-ar")
-                                    if (sysroot.exists() && llvmAr.exists()) {
-                                        execOps
-                                            .exec {
-                                                commandLine("clang", "--target=$targetTriple", "--sysroot=${sysroot.absolutePath}", "-fPIC", "-Wall", "-Wextra", "-Werror", "-c", "-I${cSource.parent}", cSource.absolutePath, "-o", tempObj.absolutePath)
-                                            }.assertNormalExitValue()
-                                        execOps
-                                            .exec {
-                                                commandLine(llvmAr.absolutePath, "rcs", outFile.absolutePath, tempObj.absolutePath)
-                                            }.assertNormalExitValue()
-                                    } else {
-                                        val prebuilt = file("src/nativeInterop/cinterop/targets/$konanTargetName/$ffiWrapperBase.a")
-                                        if (prebuilt.exists()) prebuilt.copyTo(outFile, overwrite = true)
-                                    }
-                                } else {
-                                    val prebuilt = file("src/nativeInterop/cinterop/targets/$konanTargetName/$ffiWrapperBase.a")
-                                    if (prebuilt.exists()) prebuilt.copyTo(outFile, overwrite = true)
-                                }
-                            }
-
-                            konanTargetName.startsWith("mingw") -> {
-                                val mingwSysroot = ensureKonanDependency("msys2-mingw-w64-x86_64-2", konanDeps, execOps)
-                                val arExe = File(mingwSysroot, "bin/ar.exe")
-                                if (isWindows && mingwSysroot.exists()) {
-                                    execOps
-                                        .exec {
-                                            commandLine("clang", "--target=x86_64-w64-mingw32", "--sysroot=${mingwSysroot.absolutePath}", "-Wall", "-Wextra", "-Werror", "-c", "-I${cSource.parent}", cSource.absolutePath, "-o", tempObj.absolutePath)
-                                        }.assertNormalExitValue()
-                                    execOps
-                                        .exec {
-                                            commandLine(if (arExe.exists()) arExe.absolutePath else "ar", "rcs", outFile.absolutePath, tempObj.absolutePath)
-                                        }.assertNormalExitValue()
-                                } else if (isMac) {
-                                    val ndkDirectory = ensureKonanDependency("target-toolchain-2-osx-android_ndk", konanDeps, execOps)
-                                    val llvmAr = File(ndkDirectory, "bin/llvm-ar")
-                                    if (mingwSysroot.exists() && llvmAr.exists()) {
-                                        execOps
-                                            .exec {
-                                                commandLine("clang", "--target=x86_64-w64-mingw32", "--sysroot=${mingwSysroot.absolutePath}", "-Wall", "-Wextra", "-Werror", "-c", "-I${cSource.parent}", cSource.absolutePath, "-o", tempObj.absolutePath)
-                                            }.assertNormalExitValue()
-                                        execOps
-                                            .exec {
-                                                commandLine(llvmAr.absolutePath, "rcs", outFile.absolutePath, tempObj.absolutePath)
-                                            }.assertNormalExitValue()
-                                    } else {
-                                        val prebuilt = file("src/nativeInterop/cinterop/targets/mingw_x64/$ffiWrapperBase.a")
-                                        if (prebuilt.exists()) prebuilt.copyTo(outFile, overwrite = true)
-                                    }
-                                } else {
-                                    val prebuilt = file("src/nativeInterop/cinterop/targets/mingw_x64/$ffiWrapperBase.a")
-                                    if (prebuilt.exists()) prebuilt.copyTo(outFile, overwrite = true)
-                                }
-                            }
-
-                            else -> {
-                                val prebuilt = file("src/nativeInterop/cinterop/targets/$konanTargetName/$ffiWrapperBase.a")
-                                if (prebuilt.exists()) prebuilt.copyTo(outFile, overwrite = true)
-                            }
-                        }
-                        if (!outFile.exists() || outFile.length() == 0L) {
-                            throw GradleException("compile${ffiName}Wrapper failed: output library does not exist for $konanTargetName at ${outFile.absolutePath}")
-                        }
-                        if (konanTargetName.startsWith("linux")) {
-                            val arguments =
-                                mutableListOf(
-                                    "python3",
-                                    file("verification/verify_native_archive.py").absolutePath,
-                                    outFile.absolutePath,
-                                    "--target",
-                                    konanTargetName,
-                                    "--report",
-                                    File(outDir, "native-archive-verification.json").absolutePath,
-                                )
-                            if (tempObj.isFile) arguments.addAll(listOf("--object", tempObj.absolutePath))
-                            execOps.exec { commandLine(arguments) }.assertNormalExitValue()
-                        }
-                        tempObj.delete()
-                    }
-                }
-            } else null
-
-            compilations.getByName("main") {
-                cinterops {
-                    create(ffiNameLower) {
-                        defFile(project.file(ffiDefFile))
-                        packageName("$ffiNameLower.cinterop")
-                        if (wrapperTask != null) {
-                            extraOpts(
-                                "-libraryPath",
+        targets
+            .withType<KotlinNativeTarget>()
+            .matching {
+                nativeFfiTargetNames.isEmpty() || it.name in nativeFfiTargetNames
+            }.configureEach {
+                val konanTargetName = konanTarget.name
+                val targetCapitalized = name.replaceFirstChar { it.uppercase() }
+                val wrapperTaskName = "compile${ffiName}WrapperFor$targetCapitalized"
+                val wrapperTask =
+                    if (nativeFfiCompileWrapper) {
+                        tasks.register(wrapperTaskName) {
+                            group = "build"
+                            description = "Compiles $ffiWrapperBase.c into a static library for $konanTargetName"
+                            val cSource = file("src/native/interop/cinterop/$ffiWrapperBase.c")
+                            val hSource = file("src/native/interop/cinterop/$ffiWrapperBase.h")
+                            val outDir =
                                 layout.buildDirectory
                                     .dir("cinterop-targets/$konanTargetName")
                                     .get()
-                                    .asFile.absolutePath,
-                            )
+                                    .asFile
+                            val outFile = File(outDir, "$ffiWrapperBase.a")
+                            inputs.file(cSource)
+                            inputs.file(hSource)
+                            if (konanTargetName.startsWith("linux")) {
+                                inputs.file("verification/verify_native_archive.py")
+                                outputs.file(File(outDir, "native-archive-verification.json"))
+                            }
+                            outputs.file(outFile)
+
+                            doLast {
+                                outDir.mkdirs()
+                                if (outFile.exists()) outFile.delete()
+                                if (konanTargetName.startsWith("linux")) File(outDir, "native-archive-verification.json").delete()
+                                val tempObj = File(outDir, "$ffiWrapperBase.o")
+                                val konanDeps =
+                                    layout.buildDirectory
+                                        .dir("native-wrapper-dependencies")
+                                        .get()
+                                        .asFile
+                                val isMac =
+                                    org.gradle.internal.os.OperatingSystem
+                                        .current()
+                                        .isMacOsX
+                                val isLinux =
+                                    org.gradle.internal.os.OperatingSystem
+                                        .current()
+                                        .isLinux
+                                val isWindows =
+                                    org.gradle.internal.os.OperatingSystem
+                                        .current()
+                                        .isWindows
+                                val execOps = project.serviceOf<ExecOperations>()
+
+                                when {
+                                    isMac &&
+                                        (
+                                            konanTargetName.startsWith("macos") ||
+                                                konanTargetName.startsWith("ios") ||
+                                                konanTargetName.startsWith("tvos") ||
+                                                konanTargetName.startsWith("watchos")
+                                        ) -> {
+                                        val (appleTriple, sdkName) =
+                                            when (konanTargetName) {
+                                                "macos_arm64" -> "arm64-apple-macos14.0" to "macosx"
+                                                "macos_x64" -> "x86_64-apple-macos14.0" to "macosx"
+                                                "ios_arm64" -> "arm64-apple-ios14.0" to "iphoneos"
+                                                "ios_simulator_arm64" -> "arm64-apple-ios14.0-simulator" to "iphonesimulator"
+                                                "ios_x64" -> "x86_64-apple-ios14.0-simulator" to "iphonesimulator"
+                                                "watchos_device_arm64" -> "arm64-apple-watchos7.0" to "watchos"
+                                                "watchos_simulator_arm64" -> "arm64-apple-watchos7.0-simulator" to "watchsimulator"
+                                                "tvos_arm64" -> "arm64-apple-tvos14.0" to "appletvos"
+                                                "tvos_simulator_arm64" -> "arm64-apple-tvos14.0-simulator" to "appletvsimulator"
+                                                else -> "arm64-apple-macos14.0" to "macosx"
+                                            }
+                                        execOps
+                                            .exec {
+                                                commandLine("xcrun", "-sdk", sdkName, "clang", "-target", appleTriple, "-Wall", "-Wextra", "-Werror", "-c", "-I${cSource.parent}", cSource.absolutePath, "-o", tempObj.absolutePath)
+                                            }.assertNormalExitValue()
+                                        execOps
+                                            .exec {
+                                                commandLine("xcrun", "-sdk", sdkName, "ar", "rcs", outFile.absolutePath, tempObj.absolutePath)
+                                            }.assertNormalExitValue()
+                                    }
+
+                                    konanTargetName.startsWith("android") -> {
+                                        val hostToolchain = if (isMac) "osx" else "linux"
+                                        val ndkDir = ensureKonanDependency("target-toolchain-2-$hostToolchain-android_ndk", konanDeps, execOps)
+                                        ensureKonanDependency("target-sysroot-1-android_ndk", konanDeps, execOps)
+                                        val sysroot = File(ndkDir, "sysroot")
+                                        val clangBin =
+                                            if (konanTargetName.contains("arm64")) {
+                                                File(ndkDir, "bin/aarch64-linux-android21-clang")
+                                            } else {
+                                                File(ndkDir, "bin/x86_64-linux-android21-clang")
+                                            }
+                                        val arBin =
+                                            if (konanTargetName.contains("arm64")) {
+                                                File(ndkDir, "bin/aarch64-linux-android-ar")
+                                            } else {
+                                                File(ndkDir, "bin/x86_64-linux-android-ar")
+                                            }
+                                        if (clangBin.exists() && sysroot.exists()) {
+                                            execOps
+                                                .exec {
+                                                    commandLine(clangBin.absolutePath, "--sysroot=${sysroot.absolutePath}", "-Wall", "-Wextra", "-Werror", "-c", "-I${cSource.parent}", cSource.absolutePath, "-o", tempObj.absolutePath)
+                                                }.assertNormalExitValue()
+                                            execOps
+                                                .exec {
+                                                    commandLine(arBin.absolutePath, "rcs", outFile.absolutePath, tempObj.absolutePath)
+                                                }.assertNormalExitValue()
+                                        } else {
+                                            val prebuilt = file("src/native/interop/cinterop/targets/$konanTargetName/$ffiWrapperBase.a")
+                                            val fallbackPrebuilt = file("src/native/interop/cinterop/$ffiWrapperBase.a")
+                                            if (prebuilt.exists()) {
+                                                prebuilt.copyTo(outFile, overwrite = true)
+                                            } else if (fallbackPrebuilt.exists()) {
+                                                fallbackPrebuilt.copyTo(outFile, overwrite = true)
+                                            }
+                                        }
+                                    }
+
+                                    konanTargetName.startsWith("linux") -> {
+                                        val (targetTriple, gccDirName) =
+                                            if (konanTargetName.contains("arm64")) {
+                                                "aarch64-unknown-linux-gnu" to "aarch64-unknown-linux-gnu-gcc-8.3.0-glibc-2.25-kernel-4.9-2"
+                                            } else {
+                                                "x86_64-unknown-linux-gnu" to "x86_64-unknown-linux-gnu-gcc-8.3.0-glibc-2.19-kernel-4.9-2"
+                                            }
+                                        if (isLinux) {
+                                            val gccDirectory = ensureKonanDependency(gccDirName, konanDeps, execOps)
+                                            val sysroot = File(gccDirectory, "$targetTriple/sysroot")
+                                            require(sysroot.isDirectory) { "Missing target sysroot for $konanTargetName: $sysroot" }
+                                            execOps
+                                                .exec {
+                                                    commandLine("clang", "--target=$targetTriple", "--sysroot=${sysroot.absolutePath}", "-fPIC", "-Wall", "-Wextra", "-Werror", "-c", "-I${cSource.parent}", cSource.absolutePath, "-o", tempObj.absolutePath)
+                                                }.assertNormalExitValue()
+                                            execOps
+                                                .exec {
+                                                    commandLine("ar", "rcs", outFile.absolutePath, tempObj.absolutePath)
+                                                }.assertNormalExitValue()
+                                        } else if (isMac) {
+                                            val gccDirectory = ensureKonanDependency(gccDirName, konanDeps, execOps)
+                                            val ndkDirectory = ensureKonanDependency("target-toolchain-2-osx-android_ndk", konanDeps, execOps)
+                                            val sysroot = File(gccDirectory, "$targetTriple/sysroot")
+                                            val llvmAr = File(ndkDirectory, "bin/llvm-ar")
+                                            if (sysroot.exists() && llvmAr.exists()) {
+                                                execOps
+                                                    .exec {
+                                                        commandLine("clang", "--target=$targetTriple", "--sysroot=${sysroot.absolutePath}", "-fPIC", "-Wall", "-Wextra", "-Werror", "-c", "-I${cSource.parent}", cSource.absolutePath, "-o", tempObj.absolutePath)
+                                                    }.assertNormalExitValue()
+                                                execOps
+                                                    .exec {
+                                                        commandLine(llvmAr.absolutePath, "rcs", outFile.absolutePath, tempObj.absolutePath)
+                                                    }.assertNormalExitValue()
+                                            } else {
+                                                val prebuilt = file("src/native/interop/cinterop/targets/$konanTargetName/$ffiWrapperBase.a")
+                                                if (prebuilt.exists()) prebuilt.copyTo(outFile, overwrite = true)
+                                            }
+                                        } else {
+                                            val prebuilt = file("src/native/interop/cinterop/targets/$konanTargetName/$ffiWrapperBase.a")
+                                            if (prebuilt.exists()) prebuilt.copyTo(outFile, overwrite = true)
+                                        }
+                                    }
+
+                                    konanTargetName.startsWith("mingw") -> {
+                                        val mingwSysroot = ensureKonanDependency("msys2-mingw-w64-x86_64-2", konanDeps, execOps)
+                                        val arExe = File(mingwSysroot, "bin/ar.exe")
+                                        if (isWindows && mingwSysroot.exists()) {
+                                            execOps
+                                                .exec {
+                                                    commandLine("clang", "--target=x86_64-w64-mingw32", "--sysroot=${mingwSysroot.absolutePath}", "-Wall", "-Wextra", "-Werror", "-c", "-I${cSource.parent}", cSource.absolutePath, "-o", tempObj.absolutePath)
+                                                }.assertNormalExitValue()
+                                            execOps
+                                                .exec {
+                                                    commandLine(if (arExe.exists()) arExe.absolutePath else "ar", "rcs", outFile.absolutePath, tempObj.absolutePath)
+                                                }.assertNormalExitValue()
+                                        } else if (isMac) {
+                                            val ndkDirectory = ensureKonanDependency("target-toolchain-2-osx-android_ndk", konanDeps, execOps)
+                                            val llvmAr = File(ndkDirectory, "bin/llvm-ar")
+                                            if (mingwSysroot.exists() && llvmAr.exists()) {
+                                                execOps
+                                                    .exec {
+                                                        commandLine("clang", "--target=x86_64-w64-mingw32", "--sysroot=${mingwSysroot.absolutePath}", "-Wall", "-Wextra", "-Werror", "-c", "-I${cSource.parent}", cSource.absolutePath, "-o", tempObj.absolutePath)
+                                                    }.assertNormalExitValue()
+                                                execOps
+                                                    .exec {
+                                                        commandLine(llvmAr.absolutePath, "rcs", outFile.absolutePath, tempObj.absolutePath)
+                                                    }.assertNormalExitValue()
+                                            } else {
+                                                val prebuilt = file("src/native/interop/cinterop/targets/mingw_x64/$ffiWrapperBase.a")
+                                                if (prebuilt.exists()) prebuilt.copyTo(outFile, overwrite = true)
+                                            }
+                                        } else {
+                                            val prebuilt = file("src/native/interop/cinterop/targets/mingw_x64/$ffiWrapperBase.a")
+                                            if (prebuilt.exists()) prebuilt.copyTo(outFile, overwrite = true)
+                                        }
+                                    }
+
+                                    else -> {
+                                        val prebuilt = file("src/native/interop/cinterop/targets/$konanTargetName/$ffiWrapperBase.a")
+                                        if (prebuilt.exists()) prebuilt.copyTo(outFile, overwrite = true)
+                                    }
+                                }
+                                if (!outFile.exists() || outFile.length() == 0L) {
+                                    throw GradleException("compile${ffiName}Wrapper failed: output library does not exist for $konanTargetName at ${outFile.absolutePath}")
+                                }
+                                if (konanTargetName.startsWith("linux")) {
+                                    val arguments =
+                                        mutableListOf(
+                                            "python3",
+                                            file("verification/verify_native_archive.py").absolutePath,
+                                            outFile.absolutePath,
+                                            "--target",
+                                            konanTargetName,
+                                            "--report",
+                                            File(outDir, "native-archive-verification.json").absolutePath,
+                                        )
+                                    if (tempObj.isFile) arguments.addAll(listOf("--object", tempObj.absolutePath))
+                                    execOps.exec { commandLine(arguments) }.assertNormalExitValue()
+                                }
+                                tempObj.delete()
+                            }
+                        }
+                    } else {
+                        null
+                    }
+
+                compilations.getByName("main") {
+                    cinterops {
+                        create(ffiNameLower) {
+                            defFile(project.file(ffiDefFile))
+                            packageName("$ffiNameLower.cinterop")
+                            if (wrapperTask != null) {
+                                extraOpts(
+                                    "-libraryPath",
+                                    layout.buildDirectory
+                                        .dir("cinterop-targets/$konanTargetName")
+                                        .get()
+                                        .asFile.absolutePath,
+                                )
+                            }
                         }
                     }
                 }
-            }
-            if (wrapperTask != null) {
-                tasks.matching { it.name == "cinterop${ffiName}$targetCapitalized" }.configureEach {
-                    dependsOn(wrapperTask)
-                    inputs.files(wrapperTask)
+                if (wrapperTask != null) {
+                    tasks.matching { it.name == "cinterop${ffiName}$targetCapitalized" }.configureEach {
+                        dependsOn(wrapperTask)
+                        inputs.files(wrapperTask)
+                    }
                 }
             }
-        }
     }
 
     sourceSets {
@@ -955,6 +1018,9 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
             commonTestDependencyBundle?.let { implementation(it) }
+        }
+        getByName("androidDeviceTest").dependencies {
+            implementation("androidx.test:runner:${providers.gradleProperty("versions.androidx.test.runner").get()}")
         }
         if (benchmarkEnabled) {
             val commonBenchmark = maybeCreate("commonBenchmark")
@@ -1436,7 +1502,7 @@ tasks.register("setupAndroidSdk") {
 // ============================================================================
 // JNI — JVM C bindings. Gated by project.ffi.jvm=true.
 // ----------------------------------------------------------------------------
-// Compiles src/jvmMain/c/${ffiNameLower}_jni.c into a shared library with
+// Compiles src/jvm/jvmMain/c/${ffiNameLower}_jni.c into a shared library with
 // the host clang and wires the resulting directory into
 // -Djava.library.path for jvmTest, so `System.loadLibrary(...)` in the
 // internal `<Lib>Jni` bridge resolves. Transliterated from libc-kotlin's
@@ -1447,7 +1513,7 @@ if (jvmFfiEnabled) {
         tasks.register("compile${ffiName}Jni") {
             group = "build"
             description = "Compiles ${ffiNameLower}_jni.c into a shared library for JVM JNI binding"
-            val cSource = file("src/jvmMain/c/${ffiNameLower}_jni.c")
+            val cSource = file("src/jvm/jvmMain/c/${ffiNameLower}_jni.c")
             val outDir =
                 layout.buildDirectory
                     .dir("natives")
@@ -1523,7 +1589,7 @@ if (jvmFfiEnabled) {
 // ============================================================================
 // N-API — JS/WASM C bindings. Gated by project.ffi.napi=true.
 // ----------------------------------------------------------------------------
-// Builds the native/node-${ffiNameLower}/ addon via node-gyp and copies it
+// Builds the src/js/node-${ffiNameLower}/dist/ addon via node-gyp and copies it
 // into the JS test runtime's node_modules so the Kotlin-side @JsModule
 // declaration resolves. Transliterated from libc-kotlin's buildNodeLibc/
 // copyNodeLibc with the lib name and npm package parameterized.
@@ -1597,13 +1663,13 @@ gradle.includedBuilds.forEach { ib ->
             val copyIbNode =
                 tasks.register<Copy>("copyIncludedNode$ibFfiName") {
                     dependsOn(ib.task(":buildNode$ibFfiName"))
-                    from(File(ib.projectDir, "native/node-$ibFfiLower"))
+                    from(File(ib.projectDir, "src/js/node-$ibFfiLower/dist"))
                     into(layout.buildDirectory.dir("js/node_modules/@kotlinmania/$ibFfiLower-native-bindings"))
                 }
             val copyIbWasmNode =
                 tasks.register<Copy>("copyIncludedWasmNode$ibFfiName") {
                     dependsOn(ib.task(":buildNode$ibFfiName"))
-                    from(File(ib.projectDir, "native/node-$ibFfiLower"))
+                    from(File(ib.projectDir, "src/js/node-$ibFfiLower/dist"))
                     into(layout.buildDirectory.dir("wasm/node_modules/@kotlinmania/$ibFfiLower-native-bindings"))
                 }
             tasks.matching { it.name.startsWith("jsNodeTest") || it.name.startsWith("wasmJsNodeTest") }.configureEach {
@@ -1640,17 +1706,60 @@ tasks.register("hostTests") {
 // sources or force a Swift language mode (dependencies default to Swift 5 via
 // swift-tools-version 5.9; consumer tests use Swift 6 via the harness manifest).
 val strictSwiftConfiguration = layout.projectDirectory.file("verification/strict-swift.xcconfig")
+val preparedSwiftNativeSdk = layout.buildDirectory.dir("native-sdk/kotlin-native-$kotlinVersion-macos-aarch64")
+val prepareSwiftNativeSdk =
+    tasks.register<Exec>("prepareSwiftNativeSdk") {
+        group = "build setup"
+        description = "Verifies the project-local Native SDK with the published Swift ownership header repair."
+        inputs.files(swiftNativeSdkHelper)
+        inputs.file("verification/prepare-swift-native-sdk.py")
+        doFirst {
+            preparedSwiftNativeSdk
+                .get()
+                .asFile.parentFile
+                .mkdirs()
+            commandLine(
+                providers.gradleProperty("project.validation.python").getOrElse("python3"),
+                "verification/prepare-swift-native-sdk.py",
+                "--source",
+                projectKonanDataDirectory.get().resolve("kotlin-native-prebuilt-macos-aarch64-$kotlinVersion"),
+                "--destination",
+                preparedSwiftNativeSdk.get().asFile,
+                "--helper",
+                swiftNativeSdkHelper.singleFile,
+                "--helper-sha256",
+                providers.gradleProperty("project.swift.nativeSdkHelper.sha256").get(),
+                "--receipt",
+                preparedSwiftNativeSdk
+                    .get()
+                    .asFile.parentFile
+                    .resolve("input-audit.json"),
+            )
+        }
+    }
 tasks.matching { it.name.endsWith("generateSPMPackage", ignoreCase = true) }.configureEach {
     doLast {
-        val manifests = layout.buildDirectory.dir("SPMPackage").get().asFile
-            .walkTopDown().filter { it.isFile && it.name == "Package.swift" }.toList()
+        val manifests =
+            layout.buildDirectory
+                .dir("SPMPackage")
+                .get()
+                .asFile
+                .walkTopDown()
+                .filter { it.isFile && it.name == "Package.swift" }
+                .toList()
         check(manifests.isNotEmpty()) { "No generated Swift package manifests" }
         val execOperations = serviceOf<ExecOperations>()
         manifests.forEach { manifest ->
-            execOperations.exec {
-                commandLine("python3", layout.projectDirectory.file("verification/enforce_swift5.py").asFile,
-                    manifest, "--receipt", manifest.parentFile.resolve("swift5-manifest-receipt.json"))
-            }.assertNormalExitValue()
+            execOperations
+                .exec {
+                    commandLine(
+                        "python3",
+                        layout.projectDirectory.file("verification/enforce_swift5.py").asFile,
+                        manifest,
+                        "--receipt",
+                        manifest.parentFile.resolve("swift5-manifest-receipt.json"),
+                    )
+                }.assertNormalExitValue()
         }
     }
 }
@@ -1669,55 +1778,84 @@ tasks.matching { it.name.endsWith("buildSPMPackage", ignoreCase = true) }.config
 // so Swift Export breakage surfaces locally, not only in the swift.yml CI job.
 // Pattern mirrors kasuari-kotlin. This task is part of the build contract and
 // must fail rather than skip when the required toolchain is unavailable.
+val buildSwiftExports =
+    tasks.register("buildSwiftExports") {
+        group = "build"
+        description = "Compiles the generated Native bridge and Swift export modules."
+        dependsOn(prepareSwiftNativeSdk)
+        outputs.upToDateWhen { false }
+
+        doLast {
+            val execOperations = serviceOf<ExecOperations>()
+            val swiftBuildFile =
+                layout.buildDirectory
+                    .dir("swift-test")
+                    .get()
+                    .asFile
+            if (swiftBuildFile.exists()) {
+                swiftBuildFile.deleteRecursively()
+            }
+            swiftBuildFile.mkdirs()
+            val swiftBuildDir = swiftBuildFile.absolutePath
+            execOperations
+                .exec {
+                    workingDir = projectDir
+                    val exportCommand =
+                        mutableListOf(
+                            "./gradlew",
+                            "embedSwiftExportForXcode",
+                            "-Pproject.swift.isolatedBuild=true",
+                            "-Pkotlin.native.home=${preparedSwiftNativeSdk.get().asFile.absolutePath}",
+                            "--project-cache-dir=${layout.projectDirectory.dir("build/swift-export-gradle").asFile.absolutePath}",
+                            "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g",
+                            "--no-configuration-cache",
+                            "--no-daemon",
+                            "--console=plain",
+                            "--max-workers=${gradle.startParameter.maxWorkerCount}",
+                        )
+                    if (gradle.startParameter.isOffline) exportCommand += "--offline"
+                    for (includedBuild in gradle.includedBuilds) {
+                        exportCommand += "--include-build=${includedBuild.projectDir.absolutePath}"
+                    }
+                    gradle.startParameter.projectProperties["project.repositories.mavenLocal"]?.let { mode ->
+                        exportCommand += "-Pproject.repositories.mavenLocal=$mode"
+                        System.getProperty("maven.repo.local")?.let { repository ->
+                            exportCommand += "-Dmaven.repo.local=$repository"
+                        }
+                    }
+                    commandLine(exportCommand)
+                    environment(
+                        mapOf(
+                            "BUILT_PRODUCTS_DIR" to swiftBuildDir,
+                            "TARGET_BUILD_DIR" to swiftBuildDir,
+                            "SDK_NAME" to "macosx",
+                            "CONFIGURATION" to "Debug",
+                            "ARCHS" to "arm64",
+                            "FRAMEWORKS_FOLDER_PATH" to "Frameworks",
+                            "MACOSX_DEPLOYMENT_TARGET" to "15.0",
+                            "DEPLOYMENT_TARGET_SETTING_NAME" to "MACOSX_DEPLOYMENT_TARGET",
+                            "XCODE_XCCONFIG_FILE" to strictSwiftConfiguration.asFile.absolutePath,
+                        ),
+                    )
+                }.assertNormalExitValue()
+            execOperations
+                .exec {
+                    commandLine(prepareSwiftNativeSdk.get().commandLine)
+                }.assertNormalExitValue()
+        }
+    }
+
 tasks.register("swiftExportSmokeTest") {
     group = "verification"
-    description = "Builds the Swift Export SPM package and runs swift test against it."
+    description = "Runs behavioral Swift tests against the compiled export modules."
+    dependsOn(buildSwiftExports)
     outputs.upToDateWhen { false }
-
     doLast {
         val execOperations = serviceOf<ExecOperations>()
-        val swiftBuildFile =
-            layout.buildDirectory
-                .dir("swift-test")
-                .get()
-                .asFile
-        if (swiftBuildFile.exists()) {
-            swiftBuildFile.deleteRecursively()
-        }
-        swiftBuildFile.mkdirs()
-        val swiftBuildDir = swiftBuildFile.absolutePath
-        execOperations
-            .exec {
-                workingDir = projectDir
-                val exportCommand = mutableListOf(
-                    "./gradlew",
-                    "embedSwiftExportForXcode",
-                    "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g",
-                    "--no-configuration-cache",
-                    "--no-daemon",
-                    "--console=plain",
-                    "--max-workers=${gradle.startParameter.maxWorkerCount}",
-                )
-                if (gradle.startParameter.isOffline) exportCommand += "--offline"
-                commandLine(exportCommand)
-                environment(
-                    mapOf(
-                        "BUILT_PRODUCTS_DIR" to swiftBuildDir,
-                        "TARGET_BUILD_DIR" to swiftBuildDir,
-                        "SDK_NAME" to "macosx",
-                        "CONFIGURATION" to "Debug",
-                        "ARCHS" to "arm64",
-                        "FRAMEWORKS_FOLDER_PATH" to "Frameworks",
-                        "MACOSX_DEPLOYMENT_TARGET" to "15.0",
-                        "DEPLOYMENT_TARGET_SETTING_NAME" to "MACOSX_DEPLOYMENT_TARGET",
-                        "XCODE_XCCONFIG_FILE" to strictSwiftConfiguration.asFile.absolutePath,
-                    ),
-                )
-            }.assertNormalExitValue()
 
         execOperations
             .exec {
-                workingDir = layout.projectDirectory.dir("swift-test-harness").asFile
+                workingDir = layout.projectDirectory.dir("src/swift/swift-test-harness").asFile
                 commandLine("swift", "package", "reset")
             }.assertNormalExitValue()
 
@@ -1734,23 +1872,44 @@ tasks.register("swiftExportSmokeTest") {
                     }.assertNormalExitValue()
                 out.toString().trim()
             }
-        val swiftTestCommand = mutableListOf("swift", "test", "-v",
-            "-Xswiftc", "-warnings-as-errors",
-            "-Xswiftc", "-target", "-Xswiftc", "arm64-apple-macosx15.0")
+        val swiftTestCommand =
+            mutableListOf(
+                "swift",
+                "test",
+                "-v",
+                "-Xswiftc",
+                "-warnings-as-errors",
+                "-Xswiftc",
+                "-target",
+                "-Xswiftc",
+                "arm64-apple-macosx15.0",
+            )
         if (developerDir.endsWith("CommandLineTools")) {
             val frameworks = "$developerDir/Library/Developer/Frameworks"
             swiftTestCommand +=
                 listOf(
-                    "-Xswiftc", "-F", "-Xswiftc", frameworks,
-                    "-Xlinker", "-F", "-Xlinker", frameworks,
-                    "-Xlinker", "-rpath", "-Xlinker", frameworks,
-                    "-Xlinker", "-rpath", "-Xlinker", "$developerDir/Library/Developer/usr/lib",
+                    "-Xswiftc",
+                    "-F",
+                    "-Xswiftc",
+                    frameworks,
+                    "-Xlinker",
+                    "-F",
+                    "-Xlinker",
+                    frameworks,
+                    "-Xlinker",
+                    "-rpath",
+                    "-Xlinker",
+                    frameworks,
+                    "-Xlinker",
+                    "-rpath",
+                    "-Xlinker",
+                    "$developerDir/Library/Developer/usr/lib",
                 )
         }
         val swiftTestOutput = ByteArrayOutputStream()
         val swiftTestResult =
             execOperations.exec {
-                workingDir = layout.projectDirectory.dir("swift-test-harness").asFile
+                workingDir = layout.projectDirectory.dir("src/swift/swift-test-harness").asFile
                 commandLine(swiftTestCommand)
                 standardOutput = swiftTestOutput
                 errorOutput = swiftTestOutput
@@ -1759,8 +1918,18 @@ tasks.register("swiftExportSmokeTest") {
         val swiftTestLog = swiftTestOutput.toString()
         println(swiftTestLog)
         swiftTestResult.assertNormalExitValue()
-        if (!swiftTestLog.contains(Regex("""Test run with [1-9]\d* tests?"""))) {
-            throw GradleException("swift test ran no Swift Testing tests (toolchain: $developerDir)")
+        val testCount =
+            Regex("""Test run with (\d+) tests?[^\n]* passed after""")
+                .find(swiftTestLog)
+                ?.groupValues
+                ?.get(1)
+                ?.toInt() ?: 0
+        val minimumTests = providers.gradleProperty("project.validation.swift.minimumTests").get().toInt()
+        check(testCount >= minimumTests) {
+            "swift test ran $testCount tests; at least $minimumTests behavioral cases are required (toolchain: $developerDir)"
+        }
+        check(!Regex("""(?m)^.*Test .* skipped(?:[ .:]|$)""").containsMatchIn(swiftTestLog)) {
+            "Required Swift behavioral tests were skipped"
         }
     }
 }
@@ -1813,6 +1982,7 @@ val fullTargetBuildTaskNames =
                 "wasmJsTestClasses",
                 "wasmWasiMainClasses",
                 "wasmWasiTestClasses",
+                "buildSwiftExports",
                 "swiftExportSmokeTest",
                 "assemble${frameworkName}XCFramework",
             ),
@@ -1883,14 +2053,15 @@ val checkPublicationPoms =
             for (provider in publicationPomChecks) {
                 val task = provider.get()
                 task.state.rethrowFailure()
-                check(task.state.executed &&
-                    (!task.state.skipped || task.state.upToDate || task.state.skipMessage == "FROM-CACHE")) {
+                check(
+                    task.state.executed &&
+                        (!task.state.skipped || task.state.upToDate || task.state.skipMessage == "FROM-CACHE"),
+                ) {
                     "Required POM check did not execute: ${task.path} (${task.state.skipMessage})"
                 }
             }
         }
     }
-
 
 val publicationRuntimeTaskNames =
     listOf(
@@ -1907,11 +2078,97 @@ val publicationRuntimeTaskNames =
         "watchosSimulatorArm64Test",
     )
 
+val isCiBuild = providers.environmentVariable("CI").orNull?.lowercase() !in listOf(null, "", "false", "0")
+val localAndroidX64Root = layout.buildDirectory.dir("local-android-x64")
+val localAndroidX64GuestProject = optionalTrimmedProperty("project.validation.android.x64.guestProject")
+val localAndroidX64AvdName = "thiserror_native_x64"
+val useLocalAndroidX64Guest = isMacHost && !isCiBuild && localAndroidX64GuestProject != null
+val setupLocalAndroidX64Runtime =
+    tasks.register("setupLocalAndroidX64Runtime") {
+        group = "setup"
+        description = "Installs the local Linux x64 Android runtime for the existing Parallels guest."
+        doLast {
+            check(isMacHost && !isCiBuild) { "Android guest provisioning is only available in local macOS builds" }
+            val guestProject =
+                requireNotNull(localAndroidX64GuestProject) {
+                    "Set project.validation.android.x64.guestProject to the existing guest's shared project path"
+                }
+            val root = localAndroidX64Root.get().asFile
+            val sdk = root.resolve("sdk")
+            val manager = sdk.resolve("cmdline-tools/latest/bin/sdkmanager")
+            if (!manager.isFile) downloadAndroidCommandLineTools(sdk, "linux")
+            val acceptedLicenses = projectAndroidSdkDir.resolve("licenses")
+            check(acceptedLicenses.isDirectory) { "No previously accepted Android SDK licenses are available" }
+            acceptedLicenses.listFiles()?.filter { it.isFile }?.forEach { license ->
+                val destination = sdk.resolve("licenses/${license.name}")
+                if (!destination.exists()) {
+                    destination.parentFile.mkdirs()
+                    license.copyTo(destination)
+                }
+            }
+            val imagePackage = "system-images;android-$projectCompileSdk;default;x86_64"
+            val image = sdk.resolve("system-images/android-$projectCompileSdk/default/x86_64/system.img")
+            val execOperations = serviceOf<ExecOperations>()
+            val sdkEnvironment =
+                mapOf(
+                    "REPO_OS_OVERRIDE" to "linux",
+                    "JAVA_OPTS" to "-Dos.arch=amd64",
+                    "JAVA_HOME" to System.getProperty("java.home"),
+                    "ANDROID_HOME" to sdk.absolutePath,
+                    "ANDROID_SDK_ROOT" to sdk.absolutePath,
+                )
+            if (!sdk.resolve("emulator/emulator").isFile || !sdk.resolve("platform-tools/adb").isFile || !image.isFile) {
+                root.mkdirs()
+                root.resolve("sdkmanager-install.log").outputStream().use { output ->
+                    val result =
+                        execOperations.exec {
+                            commandLine(manager, "--sdk_root=${sdk.absolutePath}", "emulator", "platform-tools", imagePackage)
+                            environment(sdkEnvironment)
+                            standardInput = ByteArrayInputStream(ByteArray(0))
+                            standardOutput = output
+                            errorOutput = output
+                            isIgnoreExitValue = true
+                        }
+                    check(result.exitValue == 0) {
+                        "Local Android runtime installation failed; see ${root.resolve("sdkmanager-install.log")}. " +
+                            "Any new license must be reviewed and accepted explicitly."
+                    }
+                }
+            }
+            val avdHome = root.resolve("avd").apply { mkdirs() }
+            val avd = avdHome.resolve("$localAndroidX64AvdName.avd")
+            if (!avd.resolve("config.ini").isFile) {
+                execOperations
+                    .exec {
+                        commandLine(
+                            sdk.resolve("cmdline-tools/latest/bin/avdmanager"),
+                            "create",
+                            "avd",
+                            "--name",
+                            localAndroidX64AvdName,
+                            "--package",
+                            imagePackage,
+                            "--path",
+                            avd.absolutePath,
+                        )
+                        environment(sdkEnvironment + ("ANDROID_AVD_HOME" to avdHome.absolutePath))
+                        standardInput = ByteArrayInputStream("no\n".toByteArray())
+                    }.assertNormalExitValue()
+            }
+            val avdLocation = avdHome.resolve("$localAndroidX64AvdName.ini")
+            val location = Properties().apply { avdLocation.inputStream().use(::load) }
+            location.setProperty("path", "$guestProject/build/local-android-x64/avd/$localAndroidX64AvdName.avd")
+            location.remove("path.rel")
+            avdLocation.outputStream().use { location.store(it, "Existing Linux guest AVD location") }
+            println("Local Android x64 SDK and AVD prepared in $root; CI provisioning is disabled")
+        }
+    }
+
 val foreignNativeRuntimeTasks =
-    listOf("linuxArm64", "linuxX64", "mingwX64").map { target ->
+    listOf("linuxArm64", "linuxX64", "mingwX64", "androidNativeArm64", "androidNativeX64").map { target ->
         tasks.register<Exec>("validate${target.replaceFirstChar { it.uppercase() }}Runtime") {
             group = "verification"
-            description = "Runs the linked $target tests on a local native host or existing Parallels guest."
+            description = "Runs the linked $target tests on its local host, guest or Android device."
             dependsOn("linkDebugTest${target.replaceFirstChar { it.uppercase() }}")
             mustRunAfter(buildAllTargets)
             val executable = if (target == "mingwX64") "test.exe" else "test.kexe"
@@ -1923,49 +2180,145 @@ val foreignNativeRuntimeTasks =
                 "--target",
                 target,
                 "--binary",
-                layout.buildDirectory.file("bin/$target/debugTest/$executable").get().asFile.absolutePath,
+                layout.buildDirectory
+                    .file("bin/$target/debugTest/$executable")
+                    .get()
+                    .asFile.absolutePath,
                 "--report-dir",
-                layout.buildDirectory.dir("reports/local-native-tests").get().asFile.absolutePath,
+                layout.buildDirectory
+                    .dir("reports/local-native-tests")
+                    .get()
+                    .asFile.absolutePath,
             )
-            providers.gradleProperty("project.validation.$platform.vm").orNull
-                ?.trim()?.takeIf { it.isNotEmpty() }?.let { args("--vm", it) }
+            if (target.startsWith("androidNative")) {
+                args(
+                    "--adb",
+                    optionalTrimmedProperty("project.validation.android.adb")
+                        ?: projectAndroidSdkDir.resolve("platform-tools/adb${if (isWindowsHost) ".exe" else ""}").absolutePath,
+                )
+                val architecture = if (target.endsWith("Arm64")) "arm64" else "x64"
+                optionalTrimmedProperty("project.validation.android.$architecture.serial")?.let { args("--serial", it) }
+                if (target == "androidNativeX64" && useLocalAndroidX64Guest) {
+                    dependsOn(setupLocalAndroidX64Runtime)
+                    args(
+                        "--guest-binary",
+                        "$localAndroidX64GuestProject/build/bin/$target/debugTest/$executable",
+                        "--android-guest-sdk",
+                        "$localAndroidX64GuestProject/build/local-android-x64/sdk",
+                        "--android-guest-avd-home",
+                        "$localAndroidX64GuestProject/build/local-android-x64/avd",
+                        "--android-guest-avd-name",
+                        localAndroidX64AvdName,
+                    )
+                    optionalTrimmedProperty("project.validation.linux.vm")?.let { args("--vm", it) }
+                }
+            } else {
+                optionalTrimmedProperty("project.validation.$platform.vm")?.let { args("--vm", it) }
+                if (isMacHost && !isCiBuild) {
+                    optionalTrimmedProperty("project.validation.$platform.guestProject")?.let {
+                        args("--guest-binary", "$it/build/bin/$target/debugTest/$executable")
+                    }
+                }
+            }
         }
     }
+
+val validateAllAppleSimulators =
+    tasks.register<Exec>("validateAllAppleSimulators") {
+        group = "verification"
+        description = "Runs the linked native tests on every available iOS, tvOS and watchOS simulator device."
+        dependsOn("linkDebugTestIosSimulatorArm64", "linkDebugTestTvosSimulatorArm64", "linkDebugTestWatchosSimulatorArm64")
+        mustRunAfter(buildAllTargets, publicationRuntimeTaskNames)
+        commandLine(
+            providers.gradleProperty("project.validation.python").getOrElse("python3"),
+            layout.projectDirectory.file("verification/run-apple-simulator-tests.py").asFile,
+            "--build-dir",
+            layout.buildDirectory.get().asFile,
+            "--report-dir",
+            layout.buildDirectory
+                .dir("reports/apple-simulator-matrix")
+                .get()
+                .asFile,
+        )
+    }
+
+fun verifyRuntimeReports(name: String, reports: Set<File>) {
+    check(reports.isNotEmpty()) { "Missing runtime reports for $name" }
+    var tests = 0
+    val parser =
+        javax.xml.parsers.DocumentBuilderFactory
+            .newInstance()
+            .newDocumentBuilder()
+    for (report in reports) {
+        val suite = parser.parse(report).documentElement
+        val count = suite.getAttribute("tests").toInt()
+        check(suite.getElementsByTagName("testcase").length == count) {
+            "$name: test count does not match the recorded cases in ${report.name}"
+        }
+        tests += count
+        for (attribute in listOf("failures", "errors", "skipped")) {
+            check(suite.getAttribute(attribute).ifEmpty { "0" }.toInt() == 0) {
+                "$name: $attribute in ${report.name}"
+            }
+        }
+        for (element in listOf("failure", "error", "skipped")) {
+            check(suite.getElementsByTagName(element).length == 0) {
+                "$name: $element result in ${report.name}"
+            }
+        }
+    }
+    check(tests > 0) { "Required runtime ran no tests: $name" }
+}
+
+tasks.matching { it.name in publicationRuntimeTaskNames || it.name == "connectedAndroidDeviceTest" }.configureEach {
+    outputs.upToDateWhen { false }
+    outputs.doNotCacheIf("Publication requires actual runtime execution") { true }
+}
+tasks.matching { it.name == "connectedAndroidDeviceTest" }.configureEach {
+    mustRunAfter(buildAllTargets)
+    doLast {
+        verifyRuntimeReports(
+            path,
+            fileTree(layout.buildDirectory.dir("outputs/androidTest-results/connected")) {
+                include("**/TEST-*.xml")
+            }.files,
+        )
+    }
+}
 
 val verifyPublicationRuntimes =
     tasks.register("verifyPublicationRuntimes") {
         group = "verification"
         description = "Rejects skipped required test tasks and missing, empty or failing runtime reports."
-        dependsOn(buildAllTargets, publicationRuntimeTaskNames, foreignNativeRuntimeTasks)
+        dependsOn(
+            buildAllTargets,
+            publicationRuntimeTaskNames,
+            foreignNativeRuntimeTasks,
+            validateAllAppleSimulators,
+            "connectedAndroidDeviceTest",
+            "swiftExportSmokeTest",
+        )
         doLast {
-            for (provider in foreignNativeRuntimeTasks) {
-                val task = provider.get()
+            for (task in foreignNativeRuntimeTasks.map { it.get() } + validateAllAppleSimulators.get() +
+                tasks.named("connectedAndroidDeviceTest").get() + tasks.named("swiftExportSmokeTest").get()) {
                 task.state.rethrowFailure()
                 check(task.state.executed && !task.state.skipped) {
-                    "Required native runtime did not execute: ${task.path} (${task.state.skipMessage})"
+                    "Required runtime did not execute: ${task.path} (${task.state.skipMessage})"
                 }
             }
             for (name in publicationRuntimeTaskNames) {
                 val task = tasks.named<AbstractTestTask>(name).get()
                 task.state.rethrowFailure()
-                check(task.state.executed &&
-                    (!task.state.skipped || task.state.upToDate || task.state.skipMessage == "FROM-CACHE")) {
+                check(task.state.executed && !task.state.skipped) {
                     "Required runtime did not execute: ${task.path} (${task.state.skipMessage})"
                 }
-                val reports = fileTree(task.reports.junitXml.outputLocation.get().asFile) { include("*.xml") }.files
-                check(reports.isNotEmpty()) { "Missing runtime reports for ${task.path}" }
-                var tests = 0
-                val parser = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
-                for (report in reports) {
-                    val suite = parser.parse(report).documentElement
-                    tests += suite.getAttribute("tests").toInt()
-                    for (attribute in listOf("failures", "errors", "skipped")) {
-                        check(suite.getAttribute(attribute).ifEmpty { "0" }.toInt() == 0) {
-                            "${task.path}: $attribute in ${report.name}"
-                        }
-                    }
-                }
-                check(tests > 0) { "Required runtime ran no tests: ${task.path}" }
+                val reports =
+                    fileTree(
+                        task.reports.junitXml.outputLocation
+                            .get()
+                            .asFile,
+                    ) { include("*.xml") }.files
+                verifyRuntimeReports(task.path, reports)
             }
         }
     }
@@ -1979,8 +2332,10 @@ val publicationCheck =
             for (name in fullTargetBuildTaskNames + "build") {
                 val task = tasks.named(name).get()
                 task.state.rethrowFailure()
-                check(task.state.executed &&
-                    (!task.state.skipped || task.state.upToDate || task.state.skipMessage == "FROM-CACHE")) {
+                check(
+                    task.state.executed &&
+                        (!task.state.skipped || task.state.upToDate || task.state.skipMessage == "FROM-CACHE"),
+                ) {
                     "Required build task did not execute: ${task.path} (${task.state.skipMessage})"
                 }
             }
@@ -2059,131 +2414,284 @@ if (wasmWasiTestPreopens.isNotEmpty()) {
 // kotlinmania:android-publication:v1 begin
 // The Android KMP plugin owns the single Android Maven publication.
 // Verify its real staged payload; never attach a second AAR publication.
-val androidPublicationRoot = providers.provider {
-    publishing.publications.getByName("kotlinMultiplatform") as MavenPublication
-}
-val androidPublicationBundle = tasks.register<Zip>("androidPublicationBundle") {
-    group = "verification"
-    // A root publication can require shared Native/cinterop metadata. Never initiate
-    // its Apple compilation from the Linux Android job.
-    val externalRoot = providers.gradleProperty("project.publication.android.rootStagingDirectory").orNull
-    val root = androidPublicationRoot.get()
-    val coordinatePath = "${root.groupId.replace('.', '/')}/${root.artifactId}"
-    dependsOn(tasks.named<PublishToMavenRepository>("publishAndroidPublicationToCentralPortalStagingRepository"))
-    from(layout.buildDirectory.dir("staging-deploy")) {
-        include("$coordinatePath-android/${root.version}/**")
+val androidPublicationRoot =
+    providers.provider {
+        publishing.publications.getByName("kotlinMultiplatform") as MavenPublication
     }
-    if (externalRoot == null) {
-        val hasAppleTargets = kotlin.targets.withType<KotlinNativeTarget>()
-            .any { it.konanTarget.family.isAppleFamily }
-        check(!hasAppleTargets || providers.systemProperty("os.name").get().startsWith("Mac")) {
-            "Stage the real KMP root on macOS, then set project.publication.android.rootStagingDirectory and expectedRootHead"
-        }
-        dependsOn(tasks.named<PublishToMavenRepository>("publishKotlinMultiplatformPublicationToCentralPortalStagingRepository"))
-        from(layout.buildDirectory.dir("staging-deploy")) {
-            include("$coordinatePath/${root.version}/**")
-        }
-    } else {
-        val rootDirectory = file(externalRoot)
-        val sourceReceipt = file("$externalRoot.source-head")
-        val expectedHead = providers.gradleProperty("project.publication.android.expectedRootHead")
-        inputs.file(sourceReceipt)
-        inputs.property("expectedRootHead", expectedHead)
-        from(rootDirectory) { include("$coordinatePath/${root.version}/**") }
-        doFirst {
-            val head = expectedHead.orNull
-            check(head != null && head.matches(Regex("[0-9a-f]{40}"))) { "Set expectedRootHead to the exact source commit" }
-            check(rootDirectory.isDirectory && sourceReceipt.isFile && sourceReceipt.readText().trim() == head) {
-                "Missing or stale same-head KMP root staging receipt: $sourceReceipt"
-            }
-            check(file("$externalRoot/$coordinatePath/${root.version}/${root.artifactId}-${root.version}.module").isFile) {
-                "Missing real KMP root module metadata in $rootDirectory"
-            }
-        }
-    }
-    duplicatesStrategy = DuplicatesStrategy.FAIL
-    archiveFileName.set("android-publication.zip")
-    destinationDirectory.set(layout.buildDirectory.dir("verification"))
-}
-val verifyAndroidPublication = tasks.register<Exec>("verifyAndroidPublication") {
-    group = "verification"
-    description = "Checks Android AAR bytecode, root redirects, POM and API/runtime metadata."
-    dependsOn(androidPublicationBundle)
-    val script = rootProject.layout.projectDirectory.file("verification/verify_android_publication.py")
-    val bundle = androidPublicationBundle.flatMap { it.archiveFile }
-    val receipt = layout.buildDirectory.file("reports/publication/android.json")
-    inputs.files(script, bundle)
-    val classes = providers.gradleProperty("project.publication.android.publicClasses").orElse("")
-    val edges = providers.gradleProperty("project.publication.android.apiDependencies").orElse("")
-    inputs.property("publicClasses", classes)
-    inputs.property("apiDependencies", edges)
-    outputs.file(receipt)
-    doFirst {
-        val publicClasses = classes.get().split(',').map { it.trim() }.filter { it.isNotEmpty() }
-        check(publicClasses.isNotEmpty()) { "Set project.publication.android.publicClasses to actual public .class paths" }
+val androidPublicationBundle =
+    tasks.register<Zip>("androidPublicationBundle") {
+        group = "verification"
+        // A root publication can require shared Native/cinterop metadata. Never initiate
+        // its Apple compilation from the Linux Android job.
+        val externalRoot = providers.gradleProperty("project.publication.android.rootStagingDirectory").orNull
         val root = androidPublicationRoot.get()
-        commandLine(listOf(
-            "python3", script.asFile.absolutePath, bundle.get().asFile.absolutePath,
-            "--group", root.groupId, "--module", root.artifactId, "--version", root.version,
-            "--receipt", receipt.get().asFile.absolutePath,
-        ) + publicClasses.flatMap { listOf("--public-class", it) } +
-            edges.get().split(',').map { it.trim() }.filter { it.isNotEmpty() }
-                .flatMap { listOf("--api-dependency", it) })
+        val coordinatePath = "${root.groupId.replace('.', '/')}/${root.artifactId}"
+        dependsOn(tasks.named<PublishToMavenRepository>("publishAndroidPublicationToCentralPortalStagingRepository"))
+        from(layout.buildDirectory.dir("staging-deploy")) {
+            include("$coordinatePath-android/${root.version}/**")
+        }
+        if (externalRoot == null) {
+            val hasAppleTargets =
+                kotlin.targets
+                    .withType<KotlinNativeTarget>()
+                    .any { it.konanTarget.family.isAppleFamily }
+            check(!hasAppleTargets || providers.systemProperty("os.name").get().startsWith("Mac")) {
+                "Stage the real KMP root on macOS, then set project.publication.android.rootStagingDirectory and expectedRootHead"
+            }
+            dependsOn(tasks.named<PublishToMavenRepository>("publishKotlinMultiplatformPublicationToCentralPortalStagingRepository"))
+            from(layout.buildDirectory.dir("staging-deploy")) {
+                include("$coordinatePath/${root.version}/**")
+            }
+        } else {
+            val rootDirectory = file(externalRoot)
+            val sourceReceipt = file("$externalRoot.source-head")
+            val expectedHead = providers.gradleProperty("project.publication.android.expectedRootHead")
+            inputs.file(sourceReceipt)
+            inputs.property("expectedRootHead", expectedHead)
+            from(rootDirectory) { include("$coordinatePath/${root.version}/**") }
+            doFirst {
+                val head = expectedHead.orNull
+                check(head != null && head.matches(Regex("[0-9a-f]{40}"))) { "Set expectedRootHead to the exact source commit" }
+                check(rootDirectory.isDirectory && sourceReceipt.isFile && sourceReceipt.readText().trim() == head) {
+                    "Missing or stale same-head KMP root staging receipt: $sourceReceipt"
+                }
+                check(file("$externalRoot/$coordinatePath/${root.version}/${root.artifactId}-${root.version}.module").isFile) {
+                    "Missing real KMP root module metadata in $rootDirectory"
+                }
+            }
+        }
+        duplicatesStrategy = DuplicatesStrategy.FAIL
+        archiveFileName.set("android-publication.zip")
+        destinationDirectory.set(layout.buildDirectory.dir("verification"))
     }
-}
+val verifyAndroidPublication =
+    tasks.register<Exec>("verifyAndroidPublication") {
+        group = "verification"
+        description = "Checks Android AAR bytecode, root redirects, POM and API/runtime metadata."
+        dependsOn(androidPublicationBundle)
+        val script = rootProject.layout.projectDirectory.file("verification/verify_android_publication.py")
+        val bundle = androidPublicationBundle.flatMap { it.archiveFile }
+        val receipt = layout.buildDirectory.file("reports/publication/android.json")
+        inputs.files(script, bundle)
+        val classes = providers.gradleProperty("project.publication.android.publicClasses").orElse("")
+        val edges = providers.gradleProperty("project.publication.android.apiDependencies").orElse("")
+        inputs.property("publicClasses", classes)
+        inputs.property("apiDependencies", edges)
+        outputs.file(receipt)
+        doFirst {
+            val publicClasses =
+                classes
+                    .get()
+                    .split(',')
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+            check(publicClasses.isNotEmpty()) { "Set project.publication.android.publicClasses to actual public .class paths" }
+            val root = androidPublicationRoot.get()
+            commandLine(
+                listOf(
+                    "python3",
+                    script.asFile.absolutePath,
+                    bundle.get().asFile.absolutePath,
+                    "--group",
+                    root.groupId,
+                    "--module",
+                    root.artifactId,
+                    "--version",
+                    root.version,
+                    "--receipt",
+                    receipt.get().asFile.absolutePath,
+                ) + publicClasses.flatMap { listOf("--public-class", it) } +
+                    edges
+                        .get()
+                        .split(',')
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                        .flatMap { listOf("--api-dependency", it) },
+            )
+        }
+    }
 tasks.named("publishToCentralPortal") { dependsOn(verifyAndroidPublication) }
 // Validate declared common pins before the release ZIP is assembled. This task is
 // not a dependency of Android-only verification: transported root staging remains host scoped.
-val verifyPublicationPins = tasks.register<Exec>("verifyPublicationPins") {
-    group = "verification"
-    description = "Checks staged root/Android dependency versions before release bundling."
-    dependsOn("publishKotlinMultiplatformPublicationToCentralPortalStagingRepository",
-        "publishAndroidPublicationToCentralPortalStagingRepository")
-    val sourceHead = providers.exec {
-        workingDir(projectDir)
-        commandLine("git", "rev-parse", "HEAD")
-    }.standardOutput.asText.map { it.trim() }
-    val script = rootProject.layout.projectDirectory.file("verification/verify_publication_pins.py")
-    val repository = layout.buildDirectory.dir("staging-deploy")
-    val receipt = layout.buildDirectory.file("reports/publication/dependency-pins.json")
-    val pomMappings = providers.gradleProperty("project.publication.android.pomDependencyModules").orElse("")
-    inputs.files(script, rootProject.layout.projectDirectory.file("gradle/libs.versions.toml"),
-        rootProject.layout.projectDirectory.file("gradle.properties"), layout.projectDirectory.file("build.gradle.kts"))
-    inputs.dir(repository)
-    inputs.property("sourceHead", sourceHead)
-    inputs.property("pomDependencyModules", pomMappings)
-    outputs.file(receipt)
-    doFirst {
-        val expected = linkedMapOf<String, String>()
-        // Public Gradle configuration dependency APIs retain direct and catalog bundle declarations.
-        for (name in listOf("commonMainApi", "commonMainImplementation")) {
-            for (dependency in configurations.getByName(name).dependencies) {
-                check(dependency is ExternalModuleDependency) {
-                    "Unsupported common dependency layout in $name; review publication pins explicitly"
-                }
-                val key = "${dependency.group}:${dependency.name}"
-                val pinned = dependency.versionConstraint.requiredVersion
-                check(!dependency.group.isNullOrBlank() && pinned.isNotBlank() &&
-                    !pinned.startsWith("latest.") && pinned.none { it in "+[]()," }) {
-                    "Publication requires an exact dependency version: $key"
-                }
-                check(expected.put(key, pinned).let { it == null || it == pinned }) {
-                    "Conflicting declared publication versions: $key"
+val verifyPublicationPins =
+    tasks.register<Exec>("verifyPublicationPins") {
+        group = "verification"
+        description = "Checks staged root/Android dependency versions before release bundling."
+        dependsOn(
+            "publishKotlinMultiplatformPublicationToCentralPortalStagingRepository",
+            "publishAndroidPublicationToCentralPortalStagingRepository",
+        )
+        val sourceHead =
+            providers
+                .exec {
+                    workingDir(projectDir)
+                    commandLine("git", "rev-parse", "HEAD")
+                }.standardOutput.asText
+                .map { it.trim() }
+        val script = rootProject.layout.projectDirectory.file("verification/verify_publication_pins.py")
+        val repository = layout.buildDirectory.dir("staging-deploy")
+        val receipt = layout.buildDirectory.file("reports/publication/dependency-pins.json")
+        val pomMappings = providers.gradleProperty("project.publication.android.pomDependencyModules").orElse("")
+        inputs.files(
+            script,
+            rootProject.layout.projectDirectory.file("gradle/libs.versions.toml"),
+            rootProject.layout.projectDirectory.file("gradle.properties"),
+            layout.projectDirectory.file("build.gradle.kts"),
+        )
+        inputs.dir(repository)
+        inputs.property("sourceHead", sourceHead)
+        inputs.property("pomDependencyModules", pomMappings)
+        outputs.file(receipt)
+        doFirst {
+            val expected = linkedMapOf<String, String>()
+            // Public Gradle configuration dependency APIs retain direct and catalog bundle declarations.
+            for (name in listOf("commonMainApi", "commonMainImplementation")) {
+                for (dependency in configurations.getByName(name).dependencies) {
+                    check(dependency is ExternalModuleDependency) {
+                        "Unsupported common dependency layout in $name; review publication pins explicitly"
+                    }
+                    val key = "${dependency.group}:${dependency.name}"
+                    val pinned = dependency.versionConstraint.requiredVersion
+                    check(
+                        !dependency.group.isNullOrBlank() && pinned.isNotBlank() &&
+                            !pinned.startsWith("latest.") && pinned.none { it in "+[]()," },
+                    ) {
+                        "Publication requires an exact dependency version: $key"
+                    }
+                    check(expected.put(key, pinned).let { it == null || it == pinned }) {
+                        "Conflicting declared publication versions: $key"
+                    }
                 }
             }
+            val stdlib = "org.jetbrains.kotlin:kotlin-stdlib"
+            check(expected.put(stdlib, kotlinVersion).let { it == null || it == kotlinVersion }) {
+                "Declared Kotlin stdlib disagrees with kotlinVersion"
+            }
+            val root = androidPublicationRoot.get()
+            commandLine(
+                listOf(
+                    "python3",
+                    script.asFile.absolutePath,
+                    repository.get().asFile.absolutePath,
+                    "--group",
+                    root.groupId,
+                    "--module",
+                    root.artifactId,
+                    "--version",
+                    root.version,
+                    "--source-head",
+                    sourceHead.get(),
+                    "--receipt",
+                    receipt.get().asFile.absolutePath,
+                ) +
+                    expected.flatMap { (key, pin) -> listOf("--dependency", "$key:$pin") } +
+                    pomMappings
+                        .get()
+                        .split(',')
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                        .flatMap { listOf("--pom-dependency", it) },
+            )
         }
-        val stdlib = "org.jetbrains.kotlin:kotlin-stdlib"
-        check(expected.put(stdlib, kotlinVersion).let { it == null || it == kotlinVersion }) {
-            "Declared Kotlin stdlib disagrees with kotlinVersion"
-        }
-        val root = androidPublicationRoot.get()
-        commandLine(listOf("python3", script.asFile.absolutePath, repository.get().asFile.absolutePath,
-            "--group", root.groupId, "--module", root.artifactId, "--version", root.version,
-            "--source-head", sourceHead.get(), "--receipt", receipt.get().asFile.absolutePath) +
-            expected.flatMap { (key, pin) -> listOf("--dependency", "$key:$pin") } +
-            pomMappings.get().split(',').map { it.trim() }.filter { it.isNotEmpty() }
-                .flatMap { listOf("--pom-dependency", it) })
     }
-}
 tasks.named("centralPortalBundle") { dependsOn(verifyPublicationPins) }
 // kotlinmania:android-publication:v1 end
+
+// Template source layout; custom source-set names and dependency edges remain project-owned.
+kotlin {
+    sourceSets.configureEach {
+        val sourceDirectories = mapOf(
+            "androidDeviceTest" to "src/android/jvm/androidDeviceTest",
+            "androidHostTest" to "src/android/jvm/androidHostTest",
+            "androidMain" to "src/android/jvm/androidMain",
+            "androidNativeArm32Main" to "src/android/native/androidNativeArm32Main",
+            "androidNativeArm64Main" to "src/android/native/androidNativeArm64Main",
+            "androidNativeArm64Test" to "src/android/native/androidNativeArm64Test",
+            "androidNativeMain" to "src/android/native/androidNativeMain",
+            "androidNativeTest" to "src/android/native/androidNativeTest",
+            "androidNativeX64Main" to "src/android/native/androidNativeX64Main",
+            "androidNativeX64Test" to "src/android/native/androidNativeX64Test",
+            "androidNativeX86Main" to "src/android/native/androidNativeX86Main",
+            "androidTest" to "src/android/jvm/androidTest",
+            "apple64Main" to "src/apple/apple64Main",
+            "apple64Test" to "src/apple/apple64Test",
+            "appleLeafMain" to "src/apple/appleLeafMain",
+            "appleMain" to "src/apple/appleMain",
+            "appleTest" to "src/apple/appleTest",
+            "blockingMain" to "src/common/blockingMain",
+            "blockingTest" to "src/common/blockingTest",
+            "browserMain" to "src/js/browserMain",
+            "browserTest" to "src/js/browserTest",
+            "commonBenchmark" to "src/common/commonBenchmark",
+            "commonMain" to "src/common/commonMain",
+            "commonTest" to "src/common/commonTest",
+            "desktopMain" to "src/common/desktopMain",
+            "filesystemTest" to "src/common/filesystemTest",
+            "hostNativeTest" to "src/native/hostNativeTest",
+            "hostSystemMain" to "src/common/hostSystemMain",
+            "hostSystemTest" to "src/common/hostSystemTest",
+            "iosArm64Main" to "src/apple/ios/iosArm64Main",
+            "iosArm64Test" to "src/apple/ios/iosArm64Test",
+            "iosMain" to "src/apple/ios/iosMain",
+            "iosSimulatorArm64Main" to "src/apple/ios/iosSimulatorArm64Main",
+            "iosSimulatorArm64Test" to "src/apple/ios/iosSimulatorArm64Test",
+            "iosTest" to "src/apple/ios/iosTest",
+            "iosX64Main" to "src/apple/ios/iosX64Main",
+            "jsMain" to "src/js/jsMain",
+            "jsTest" to "src/js/jsTest",
+            "jvmAndAndroidMain" to "src/common/jvmAndAndroidMain",
+            "jvmAndAndroidTest" to "src/common/jvmAndAndroidTest",
+            "jvmBenchmark" to "src/jvm/jvmBenchmark",
+            "jvmConsumerTest" to "src/jvm/jvmConsumerTest",
+            "jvmMain" to "src/jvm/jvmMain",
+            "jvmTest" to "src/jvm/jvmTest",
+            "linuxArm64Main" to "src/native/linux/linuxArm64Main",
+            "linuxArm64Test" to "src/native/linux/linuxArm64Test",
+            "linuxLikeMain" to "src/native/linux/linuxLikeMain",
+            "linuxMain" to "src/native/linux/linuxMain",
+            "linuxTest" to "src/native/linux/linuxTest",
+            "linuxX64Main" to "src/native/linux/linuxX64Main",
+            "linuxX64Test" to "src/native/linux/linuxX64Test",
+            "macosArm64Main" to "src/apple/macos/macosArm64Main",
+            "macosArm64Test" to "src/apple/macos/macosArm64Test",
+            "macosMain" to "src/apple/macos/macosMain",
+            "macosTest" to "src/apple/macos/macosTest",
+            "macosX64Main" to "src/apple/macos/macosX64Main",
+            "mingwMain" to "src/native/mingw/mingwMain",
+            "mingwTest" to "src/native/mingw/mingwTest",
+            "mingwX64Main" to "src/native/mingw/mingwX64Main",
+            "mingwX64Test" to "src/native/mingw/mingwX64Test",
+            "nativeMain" to "src/native/nativeMain",
+            "nativeTest" to "src/native/nativeTest",
+            "nodeMain" to "src/js/nodeMain",
+            "nodeTest" to "src/js/nodeTest",
+            "nonPosixMain" to "src/native/nonPosixMain",
+            "nonWinMain" to "src/native/nonWinMain",
+            "posixMain" to "src/native/posix/posixMain",
+            "posixTest" to "src/native/posix/posixTest",
+            "tvosArm64Main" to "src/apple/tvos/tvosArm64Main",
+            "tvosArm64Test" to "src/apple/tvos/tvosArm64Test",
+            "tvosMain" to "src/apple/tvos/tvosMain",
+            "tvosSimulatorArm64Main" to "src/apple/tvos/tvosSimulatorArm64Main",
+            "tvosSimulatorArm64Test" to "src/apple/tvos/tvosSimulatorArm64Test",
+            "tvosTest" to "src/apple/tvos/tvosTest",
+            "wasmJsMain" to "src/js/wasm/wasmJsMain",
+            "wasmJsTest" to "src/js/wasm/wasmJsTest",
+            "wasmWasiMain" to "src/js/wasm/wasmWasiMain",
+            "wasmWasiTest" to "src/js/wasm/wasmWasiTest",
+            "watchosArm32Main" to "src/apple/watchos/watchosArm32Main",
+            "watchosArm64Main" to "src/apple/watchos/watchosArm64Main",
+            "watchosDeviceArm64Main" to "src/apple/watchos/watchosDeviceArm64Main",
+            "watchosDeviceArm64Test" to "src/apple/watchos/watchosDeviceArm64Test",
+            "watchosMain" to "src/apple/watchos/watchosMain",
+            "watchosSimulatorArm64Main" to "src/apple/watchos/watchosSimulatorArm64Main",
+            "watchosSimulatorArm64Test" to "src/apple/watchos/watchosSimulatorArm64Test",
+            "watchosTest" to "src/apple/watchos/watchosTest",
+            "webMain" to "src/js/webMain",
+            "webTest" to "src/js/webTest",
+        )
+        val sourceRoot = sourceDirectories[name] ?: "src/$name"
+        kotlin.setSrcDirs(kotlin.srcDirs.filter { it != file("src/$name/kotlin") && it != file("$sourceRoot/kotlin") } + file("$sourceRoot/kotlin"))
+        resources.setSrcDirs(resources.srcDirs.filter { it != file("src/$name/resources") && it != file("$sourceRoot/resources") } + file("$sourceRoot/resources"))
+    }
+}

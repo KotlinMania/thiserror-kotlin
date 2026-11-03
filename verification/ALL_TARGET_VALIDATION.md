@@ -89,7 +89,7 @@ SDK_NAME=macosx CONFIGURATION=Debug ARCHS=arm64 FRAMEWORKS_FOLDER_PATH=Framework
 MACOSX_DEPLOYMENT_TARGET=15.0 DEPLOYMENT_TARGET_SETTING_NAME=MACOSX_DEPLOYMENT_TARGET \
 ./gradlew embedSwiftExportForXcode --no-daemon --max-workers=2 --no-configuration-cache
 
-swift test --package-path swift-test-harness -v \
+swift test --package-path src/swift/swift-test-harness -v \
   -Xswiftc -swift-version -Xswiftc 6 -Xswiftc -warnings-as-errors
 ```
 

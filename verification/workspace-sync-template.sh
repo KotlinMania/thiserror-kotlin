@@ -1,5 +1,5 @@
 #!/bin/bash
-# Deliberately limited to reviewed Android publication hunks; no blanket copies.
+# Run the standalone Android publication planner against this template.
 set -euo pipefail
-workspace="$(cd "$(dirname "$0")/.." && pwd)"
-exec "${KOTLINMANIA_PYTHON:-python3}" "$workspace/template/verification/sync_android_publication.py" "$@"
+project="$(cd "$(dirname "$0")/.." && pwd)"
+exec "$project/../tools/java-build-tool.sh" AndroidPublicationSync --source "$project" "$@"

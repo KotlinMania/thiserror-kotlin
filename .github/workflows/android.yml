@@ -39,10 +39,15 @@ jobs:
           ./gradlew
           setupAndroidSdk
           compileAndroidMain
+          compileAndroidHostTest
+          compileAndroidDeviceTest
+          assembleAndroidMain
+          assembleAndroidHostTest
+          assembleAndroidDeviceTest
           assembleUnitTest
           assembleAndroidTest
           testAndroidHostTest
-          verifyAndroidPublication
+          androidPublicationBundle
           -Pproject.publication.android.rootStagingDirectory=build/root-publication/staging-deploy
           -Pproject.publication.android.expectedRootHead=${{ github.sha }}
           --no-configuration-cache

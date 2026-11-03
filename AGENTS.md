@@ -648,7 +648,7 @@ For each `tmp/**/tests/*.rs`, `tmp/**/benches/*.rs`, and `#[cfg(test)] mod
 tests { … }` block:
 
 - **If the test exercises behavior the Kotlin port can faithfully match,
-  port it** to `src/commonTest/.../<File>Test.kt` (or per-target test
+  port it** to `src/common/commonTest/.../<File>Test.kt` (or per-target test
   source where commonTest can't express it). Use the upstream Rust file's
   organization; preserve test names translated to camelCase.
 - **If the test depends on a Rust-specific semantic the Kotlin
@@ -668,7 +668,7 @@ schemars-kotlin / itertools-kotlin / kasuari-kotlin):
 ```kotlin
 val swiftTest by tasks.registering(Exec::class) {
     dependsOn("embedSwiftExportForXcode")
-    workingDir = file("swift-test-harness")
+    workingDir = file("src/swift/swift-test-harness")
     commandLine("swift", "test", "--package-path", ".")
     // Treat any non-zero exit as a build failure.
     isIgnoreExitValue = false
@@ -679,7 +679,7 @@ tasks.named("test") {
 }
 ```
 
-If `swift-test-harness/` isn't present yet, the per-repo
+If `src/swift/swift-test-harness/` isn't present yet, the per-repo
 `SWIFT_EXPORT_ROLLOUT.md` documents how to scaffold it — it's part of the
 five canonical rollout changes.
 
