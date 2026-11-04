@@ -289,7 +289,7 @@ workflow uses the current template’s macOS 26 runner for its Xcode SDK.
 
 ### Porting guidelines
 
-See [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md) for translator discipline, port-lint header convention, and Rust → Kotlin idiom mapping.
+See [AGENTS.md](AGENTS.md) for translator discipline, port-lint header convention, and Rust → Kotlin idiom mapping.
 
 ### License
 

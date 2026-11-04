@@ -96,7 +96,7 @@ public class ParamsInScope(
 
             is PathArguments.Parenthesized -> {
                 for (input in args.inputs.toList()) {
-                    crawl(input, visitor)
+                    crawl(input.ty, visitor)
                 }
                 when (val output = args.output) {
                     is io.github.kotlinmania.syn.ReturnType.TypeReturn -> {

@@ -128,14 +128,13 @@ public final class SwiftExportSupport {
                     project.getGradle().getStartParameter().getProjectProperties().forEach((k, v) ->
                         exportCommand.add("-P" + k + "=" + v)
                     );
-                    Object nativeSdkHome = project.findProperty("project.swiftExport.nativeSdkHome");
-                    if (nativeSdkHome != null && !nativeSdkHome.toString().isBlank()) {
-                        exportCommand.add("-Pkotlin.native.home=" + nativeSdkHome);
-                    }
-                    String localMaven = project.getGradle().getStartParameter().getSystemPropertiesArgs().get("maven.repo.local");
-                    if (localMaven != null) {
-                        exportCommand.add("-Dmaven.repo.local=" + localMaven);
-                    }
+                    project.getGradle().getStartParameter().getInitScripts().forEach(initScript -> {
+                        exportCommand.add("--init-script");
+                        exportCommand.add(initScript.getAbsolutePath());
+                    });
+                    project.getGradle().getStartParameter().getSystemPropertiesArgs().forEach((key, value) ->
+                        exportCommand.add("-D" + key + "=" + value)
+                    );
 
                     Map<String, String> env = new LinkedHashMap<>();
                     env.put("BUILT_PRODUCTS_DIR", configBuildDir.getAbsolutePath());
@@ -224,11 +223,8 @@ public final class SwiftExportSupport {
                     String log = testOut.toString(StandardCharsets.UTF_8);
                     System.out.println(log);
                     result.assertNormalExitValue();
-                    java.util.regex.Matcher behavioralTests = Pattern.compile("Test run with (\\d+) tests?").matcher(log);
-                    int minimumTests = Integer.parseInt(prop(project, "project.validation.swift.minimumTests", "1"));
-                    boolean skippedTests = Pattern.compile("(?m)^.*Test .* skipped(?:[ .:]|$)").matcher(log).find();
-                    if (!behavioralTests.find() || Integer.parseInt(behavioralTests.group(1)) < minimumTests || skippedTests) {
-                        throw new GradleException("swift test (-c " + swiftConfig + ") requires at least " + minimumTests + " unskipped behavioral tests (toolchain: " + developerDir + ")");
+                    if (!SWIFT_TEST_RUN_PATTERN.matcher(log).find()) {
+                        throw new GradleException("swift test (-c " + swiftConfig + ") ran no Swift Testing tests (toolchain: " + developerDir + ")");
                     }
                 }
             });

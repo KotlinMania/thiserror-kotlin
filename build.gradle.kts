@@ -7,14 +7,19 @@ import com.android.build.api.variant.KotlinMultiplatformAndroidComponentsExtensi
 import com.android.build.api.withAndroid
 import dev.detekt.gradle.Detekt
 import groovy.json.JsonSlurper
+import io.github.kotlinmania.build.AndroidDeviceTestVerifier
 import io.github.kotlinmania.build.AndroidSdkSupport
+import io.github.kotlinmania.build.BuildToolTask
 import io.github.kotlinmania.build.CentralPortalSupport
 import io.github.kotlinmania.build.FfiBuildSupport
 import io.github.kotlinmania.build.IdeSourceSetSupport
+import io.github.kotlinmania.build.NativeTestRunner
 import io.github.kotlinmania.build.SwiftExportSupport
 import io.github.kotlinmania.build.VerificationSupport
 import org.gradle.api.GradleException
 import org.gradle.api.artifacts.VersionCatalogsExtension
+import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.api.publish.maven.tasks.AbstractPublishToMaven
 import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.bundling.Jar
@@ -27,6 +32,7 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 import org.jetbrains.kotlin.gradle.plugin.KotlinTarget
+import org.jetbrains.kotlin.gradle.plugin.mpp.AbstractExecutable
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.swiftexport.SwiftExportedModuleMetadata
@@ -38,7 +44,7 @@ import org.jetbrains.kotlin.gradle.targets.web.nodejs.BaseNodeJsRootExtension
 import org.jetbrains.kotlin.gradle.targets.web.yarn.BaseYarnRootExtension
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import org.jlleitschuh.gradle.ktlint.reporter.ReporterType
-import java.security.MessageDigest
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -311,15 +317,13 @@ val projectKonanDataDirectory =
             File(it).absoluteFile
         }.orElse(providers.systemProperty("user.home").map { File(it, ".konan") })
 
-val kotlinVersion = providers.gradleProperty("versions.kotlin").get()
-val swiftExporterVersion = providers.gradleProperty("versions.swift.exporter").get()
 val projectDependencyHandler = project.dependencies
 configurations.configureEach {
     if (name.contains("androidDeviceTest", ignoreCase = true)) {
         exclude(group = "org.jetbrains", module = "annotations")
     }
     if (name == "swiftExportClasspath") {
-        dependencies.add(projectDependencyHandler.create("io.github.kotlinmania:swift-export-embeddable:$swiftExporterVersion"))
+        dependencies.add(projectDependencyHandler.create("io.github.kotlinmania:swift-export-embeddable:2.4.20-km.4"))
     }
 }
 
@@ -484,6 +488,10 @@ kotlin {
     mingwX64 {
         configureBenchmarkCompilation()
         addSharedLib()
+        binaries.withType<AbstractExecutable>().configureEach {
+            // Match Linux, macOS, and Rust libtest 8 MiB stack reserve instead of MinGW's 1 MiB PE default.
+            linkerOpts("-Wl,--stack,8388608")
+        }
     }
 
     // Android NDK — 64-bit only
@@ -568,6 +576,10 @@ kotlin {
         .withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile>()
         .matching { it.name.startsWith("compileSwiftExportMain") }
         .configureEach {
+            // KGP's generated SwiftExport bridge files emit type-erased generic casts
+            // (dereferenceExternalRCRef(self) as GenericType<Any?>) without @Suppress("UNCHECKED_CAST").
+            // Disable UNCHECKED_CAST on KGP's generated bridge only while keeping
+            // allWarningsAsErrors = true for all source compilations and all other bridge diagnostics.
             compilerOptions.freeCompilerArgs.add("-Xwarning-level=UNCHECKED_CAST:disabled")
         }
 
@@ -669,7 +681,9 @@ kotlin {
 
         androidMain.dependencies {}
         named("androidHostTest").dependencies {}
-        named("androidDeviceTest").dependencies {}
+        named("androidDeviceTest").dependencies {
+            implementation(libs.androidx.test.runner)
+        }
 
         webMain.dependencies {}
         webTest.dependencies {}
@@ -1102,7 +1116,7 @@ val hasAppleTargets =
     kotlin.targets
         .withType<KotlinNativeTarget>()
         .any { it.konanTarget.family.isAppleFamily }
-CentralPortalSupport.configure(project, publishProjectName, hasAppleTargets)
+CentralPortalSupport.configure(project, publishProjectName, jvmFfiEnabled, hasAppleTargets)
 
 // ============================================================================
 // Verification, Build Aggregates & Runtime Validation
@@ -1170,20 +1184,94 @@ val fullTargetBuildTaskNames =
         if (napiFfiEnabled) add("buildNode$ffiName")
     }
 
+val verifierProperties =
+    Properties().apply {
+        val verifierFile = rootProject.file("verifier.properties")
+        if (verifierFile.isFile) {
+            verifierFile.inputStream().use { load(it) }
+        }
+    }
+
+val foreignNativeRuntimeTasks =
+    listOf("linuxArm64", "linuxX64", "mingwX64").map { target ->
+        tasks.register<BuildToolTask>("validate${target.replaceFirstChar { it.uppercase() }}Runtime") {
+            group = "verification"
+            description = "Runs linked tests on a local native host or existing Parallels guest; records unavailable hosts."
+            dependsOn("linkDebugTest${target.replaceFirstChar { it.uppercase() }}")
+            toolClass.set(NativeTestRunner::class.java.name)
+            val executable = if (target == "mingwX64") "test.exe" else "test.kexe"
+            val binaryFile = layout.buildDirectory.file("bin/$target/debugTest/$executable")
+            onlyIf { binaryFile.get().asFile.exists() }
+            val platform = if (target == "mingwX64") "windows" else "linux"
+            arguments.addAll(
+                "--target",
+                target,
+                "--binary",
+                binaryFile.get().asFile.absolutePath,
+                "--report-dir",
+                layout.buildDirectory
+                    .dir("reports/local-native-tests")
+                    .get()
+                    .asFile.absolutePath,
+                "--allow-unavailable",
+            )
+            val vmSelector =
+                providers
+                    .gradleProperty("project.validation.$platform.vm")
+                    .orNull
+                    ?.trim()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: verifierProperties
+                        .getProperty("project.validation.$platform.vm")
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+            if (vmSelector != null) {
+                arguments.addAll("--vm", vmSelector)
+            }
+        }
+    }
+
+tasks.named("validateLinuxX64Runtime") {
+    mustRunAfter("validateLinuxArm64Runtime")
+}
+tasks.named("validateMingwX64Runtime") {
+    mustRunAfter("validateLinuxX64Runtime")
+}
+
+tasks.matching { it.name == "connectedAndroidDeviceTest" }.configureEach {
+    outputs.upToDateWhen { false }
+}
+
+tasks.register("verifyAndroidDeviceTestResults") {
+    group = "verification"
+    description = "Requires nonempty, passing Android device-test results."
+    dependsOn("connectedAndroidDeviceTest")
+    doLast {
+        AndroidDeviceTestVerifier.verify(
+            layout.buildDirectory
+                .dir("outputs/androidTest-results/connected")
+                .get()
+                .asFile,
+        )
+    }
+}
+
 tasks.register("hostTests") {
     group = "verification"
-    description = "Runs every enabled target's tests that this host can execute, plus Android host tests."
+    description = "Runs every enabled target's tests that this host can execute, foreign Parallels guest tests, and Android host and connected-device tests."
     dependsOn(
         rootProject.tasks.named("kotlinUpgradeYarnLock"),
         rootProject.tasks.named("kotlinWasmUpgradeYarnLock"),
         "allTests",
         "testAndroidHostTest",
+        "verifyAndroidDeviceTestResults",
+        foreignNativeRuntimeTasks,
     )
 }
 
 tasks.register("test") {
     group = "verification"
-    description = "Runs tests for every enabled target this host can run, Android host tests, and the Swift Export smoke test."
+    description = "Runs tests for every enabled target this host can run, foreign Parallels guest tests, Android host and connected-device tests, and the Swift Export smoke test."
     dependsOn("hostTests")
     dependsOn("swiftExportSmokeTest")
 }
@@ -1291,6 +1379,153 @@ if (macroLayoutCSource.isFile) {
     tasks.named("check") { dependsOn(wasmWasiPreopenTest) }
 }
 
+val publicationCompilationTasks =
+    kotlin.targets
+        .filter { it.name != "metadata" }
+        .flatMap { target -> target.compilations.map { it.compileTaskProvider } }
+
+val compileAllTargets =
+    tasks.register("compileAllTargets") {
+        group = "verification"
+        description = "Compiles main and test sources for every declared target."
+        dependsOn(publicationCompilationTasks)
+        doLast {
+            val skippedCompilations =
+                publicationCompilationTasks.map { it.get() }.filter { task ->
+                    !task.state.executed ||
+                        (task.state.skipped && !task.state.upToDate && task.state.skipMessage != "FROM-CACHE")
+                }
+            check(skippedCompilations.isEmpty()) {
+                "Required target compilations did not complete: " +
+                    skippedCompilations.joinToString { "${it.path} (${it.state.skipMessage ?: "not executed"})" }
+            }
+        }
+    }
+
+val buildAllTargets =
+    tasks.register("buildAllTargets") {
+        group = "verification"
+        description = "Compiles and links every declared target before runtime validation."
+        dependsOn(
+            rootYarnLockTasks,
+            compileAllTargets,
+            fullTargetBuildTaskNames.filter { it != "swiftExportSmokeTest" },
+        )
+    }
+
+foreignNativeRuntimeTasks.forEach { taskProvider ->
+    taskProvider.configure { mustRunAfter(buildAllTargets) }
+}
+tasks.withType<AbstractTestTask>().configureEach {
+    mustRunAfter(buildAllTargets)
+}
+tasks.matching { it.name == "connectedAndroidDeviceTest" }.configureEach {
+    mustRunAfter(buildAllTargets)
+}
+tasks.named("swiftExportSmokeTest") { mustRunAfter(buildAllTargets) }
+
+val publicationPomChecks =
+    publishing.publications.withType<MavenPublication>().map { publication ->
+        tasks.named("checkPomFileFor${publication.name.replaceFirstChar { it.uppercase() }}Publication")
+    }
+
+val checkPublicationPoms =
+    tasks.register("checkPublicationPoms") {
+        group = "verification"
+        description = "Checks the generated POM for every Maven publication."
+        dependsOn(publicationPomChecks)
+        doLast {
+            for (provider in publicationPomChecks) {
+                val task = provider.get()
+                task.state.rethrowFailure()
+                check(
+                    task.state.executed &&
+                        (!task.state.skipped || task.state.upToDate || task.state.skipMessage == "FROM-CACHE"),
+                ) {
+                    "Required POM check did not execute: ${task.path} (${task.state.skipMessage})"
+                }
+            }
+        }
+    }
+
+val publicationRuntimeTaskNames =
+    listOf(
+        "jvmTest",
+        "testAndroidHostTest",
+        "jsBrowserTest",
+        "jsNodeTest",
+        "wasmJsBrowserTest",
+        "wasmJsNodeTest",
+        "wasmWasiNodeTest",
+        "macosArm64Test",
+        "iosSimulatorArm64Test",
+        "tvosSimulatorArm64Test",
+        "watchosSimulatorArm64Test",
+    )
+
+tasks.matching { it.name in publicationRuntimeTaskNames }.configureEach {
+    outputs.upToDateWhen { false }
+    outputs.doNotCacheIf("Publication requires actual runtime execution") { true }
+}
+
+val verifyPublicationRuntimes =
+    tasks.register("verifyPublicationRuntimes") {
+        group = "verification"
+        description = "Rejects skipped required test tasks and missing, empty or failing runtime reports."
+        dependsOn(buildAllTargets, publicationRuntimeTaskNames, foreignNativeRuntimeTasks, "verifyAndroidDeviceTestResults")
+        doLast {
+            for (provider in foreignNativeRuntimeTasks) {
+                val task = provider.get()
+                task.state.rethrowFailure()
+                check(task.state.executed && !task.state.skipped) {
+                    "Required native runtime did not execute: ${task.path} (${task.state.skipMessage})"
+                }
+            }
+            val androidVerifyTask = tasks.named("verifyAndroidDeviceTestResults").get()
+            androidVerifyTask.state.rethrowFailure()
+            check(androidVerifyTask.state.executed && !androidVerifyTask.state.skipped) {
+                "Required Android device runtime did not execute: ${androidVerifyTask.path} (${androidVerifyTask.state.skipMessage})"
+            }
+            for (name in publicationRuntimeTaskNames) {
+                val task = tasks.named<AbstractTestTask>(name).get()
+                task.state.rethrowFailure()
+                check(task.state.executed && !task.state.skipped) {
+                    "Required runtime did not execute: ${task.path} (${task.state.skipMessage})"
+                }
+                val reports =
+                    fileTree(
+                        task.reports.junitXml.outputLocation
+                            .get()
+                            .asFile,
+                    ) { include("*.xml") }.files
+                VerificationSupport.verifyJunitXmlReports(task.path, reports)
+            }
+        }
+    }
+
+val publicationCheck =
+    tasks.register("publicationCheck") {
+        group = "verification"
+        description = "Builds every target, runs tests and checks every POM before Maven publication."
+        dependsOn("build", compileAllTargets, checkPublicationPoms, verifyPublicationRuntimes)
+        doLast {
+            for (name in fullTargetBuildTaskNames + "build") {
+                val task = tasks.named(name).get()
+                task.state.rethrowFailure()
+                check(
+                    task.state.executed &&
+                        (!task.state.skipped || task.state.upToDate || task.state.skipMessage == "FROM-CACHE"),
+                ) {
+                    "Required build task did not execute: ${task.path} (${task.state.skipMessage})"
+                }
+            }
+        }
+    }
+
+tasks.withType<AbstractPublishToMaven>().configureEach {
+    dependsOn(publicationCheck)
+}
+
 tasks.register("classes") {
     dependsOn(
         "compileAndroidMain",
@@ -1332,112 +1567,3 @@ if (wasmWasiTestPreopens.isNotEmpty()) {
         }
     }
 }
-
-// Retain the reviewed Swift exporter and Native SDK fixture.
-val swiftNativeSdkHelper =
-    configurations.create("swiftNativeSdkHelper") {
-        isCanBeConsumed = false
-        isTransitive = false
-        dependencies.add(
-            projectDependencyHandler.create(
-                "io.github.kotlinmania:swift-export-embeddable:$swiftExporterVersion:native-sdk-helper@zip",
-            ),
-        )
-    }
-
-tasks.matching { it.name.endsWith("DebugSwiftExport") || it.name.endsWith("ReleaseSwiftExport") }.configureEach {
-    doFirst {
-        val workerFiles = inputs.files.files.filter { it.extension == "jar" }
-        check(workerFiles.size == 16) { "Expected the reviewed 16-JAR Swift Export worker classpath" }
-        val exporters =
-            workerFiles
-                .filter { it.name.startsWith("swift-export-embeddable-") }
-        check(exporters.size == 1) { "Swift Export requires exactly one exporter provider" }
-        val digest =
-            MessageDigest
-                .getInstance("SHA-256")
-                .digest(exporters.single().readBytes())
-                .joinToString("") { "%02x".format(it) }
-        check(digest == providers.gradleProperty("project.swift.exporter.sha256").get()) {
-            "Swift exporter checksum does not match the reviewed published artifact"
-        }
-        val receipt =
-            layout.buildDirectory
-                .file("reports/swift-export/$name-worker.sha256")
-                .get()
-                .asFile
-        receipt.parentFile.mkdirs()
-        receipt.writeText(
-            workerFiles.sortedBy { it.name }.joinToString("\n", postfix = "\n") { jar ->
-                MessageDigest
-                    .getInstance("SHA-256")
-                    .digest(jar.readBytes())
-                    .joinToString("") { "%02x".format(it) } + "  " + jar.name
-            },
-        )
-    }
-}
-
-if (providers.gradleProperty("kotlin.native.home").isPresent) {
-    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeLink>().configureEach {
-        val cache = layout.buildDirectory.dir("native-auto-cache/$name")
-        toolOptions.freeCompilerArgs.add(cache.map { "-Xauto-cache-dir=${it.asFile.absolutePath}" })
-    }
-}
-
-val preparedSwiftNativeSdk = layout.buildDirectory.dir("native-sdk/kotlin-native-$kotlinVersion-macos-aarch64")
-val prepareSwiftNativeSdk =
-    tasks.register<Exec>("prepareSwiftNativeSdk") {
-        group = "build setup"
-        description = "Verifies the project-local Native SDK with the published Swift ownership header repair."
-        inputs.files(swiftNativeSdkHelper)
-        inputs.file("verification/prepare-swift-native-sdk.py")
-        doFirst {
-            preparedSwiftNativeSdk
-                .get()
-                .asFile.parentFile
-                .mkdirs()
-            commandLine(
-                providers.gradleProperty("project.validation.python").getOrElse("python3"),
-                "verification/prepare-swift-native-sdk.py",
-                "--source",
-                projectKonanDataDirectory.get().resolve("kotlin-native-prebuilt-macos-aarch64-$kotlinVersion"),
-                "--destination",
-                preparedSwiftNativeSdk.get().asFile,
-                "--helper",
-                swiftNativeSdkHelper.singleFile,
-                "--helper-sha256",
-                providers.gradleProperty("project.swift.nativeSdkHelper.sha256").get(),
-                "--receipt",
-                preparedSwiftNativeSdk
-                    .get()
-                    .asFile.parentFile
-                    .resolve("input-audit.json"),
-            )
-        }
-    }
-
-extensions.extraProperties.set(
-    "project.swiftExport.nativeSdkHome",
-    preparedSwiftNativeSdk.get().asFile.absolutePath,
-)
-tasks.named("swiftExportSmokeTest") { dependsOn(prepareSwiftNativeSdk) }
-tasks.register("buildSwiftExports") {
-    group = "verification"
-    description = "Builds and tests the template Debug and Release Swift exports."
-    dependsOn("swiftExportSmokeTest")
-}
-
-// kotlinmania:project-verification:v1 begin
-extra["template.fullTargetBuildTaskNames"] = fullTargetBuildTaskNames
-apply(from = "gradle/project-verification.gradle.kts")
-
-// A full successful build is required for every Maven publication, including local Maven.
-tasks.withType<org.gradle.api.publish.maven.tasks.AbstractPublishToMaven>().configureEach {
-    dependsOn(tasks.named("build"))
-}
-// Complete native links before a child Swift build uses its project-specific SDK.
-tasks.named("swiftExportSmokeTest") {
-    mustRunAfter(fullTargetBuildTaskNames.filter { it != "swiftExportSmokeTest" })
-}
-// kotlinmania:project-verification:v1 end

@@ -9,9 +9,10 @@ detekt = "2.0.0-alpha.6"
 ktlint = "14.2.0"
 ktlintEngine = "1.8.0"
 kotlinxBenchmark = "0.5.0"
-procMacro2 = "0.1.7"
-quote = "0.2.5"
-syn = "0.4.0"
+androidxTestRunner = "1.7.0"
+procMacro2 = "0.1.8"
+quote = "0.3.1"
+syn = "0.5.0"
 anyhow = "0.2.0"
 
 [plugins]
@@ -31,6 +32,7 @@ kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "datetime" }
 collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version.ref = "collectionsImmutable" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
 proc-macro2-kotlin = { module = "io.github.kotlinmania:proc-macro2-kotlin", version.ref = "procMacro2" }
 quote-kotlin = { module = "io.github.kotlinmania:quote-kotlin", version.ref = "quote" }
 syn-kotlin = { module = "io.github.kotlinmania:syn-kotlin", version.ref = "syn" }

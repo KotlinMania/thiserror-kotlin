@@ -30,15 +30,3 @@ The file takes precedence over those old command-line settings. Publication task
 retain their explicit destinations: `publishToMavenLocal` writes locally, and
 `publishToCentralPortal` uses the existing Central Portal flow. The mode changes
 which dependencies those tasks build against. Publication verification stays enabled.
-
-To verify resolution order, remote fallback, subprojects, plugin/buildscript
-repositories, local publication, and invalid configuration with isolated fixtures:
-
-```bash
-python3 verification/test_maven_mode.py \
-  --gradle /absolute/path/to/gradle \
-  --scratch ../automation-artifacts/maven-mode-validation
-```
-
-Use a new scratch directory for each run. The test writes fixture publications
-only inside that directory and retains its Gradle logs and result receipt.
