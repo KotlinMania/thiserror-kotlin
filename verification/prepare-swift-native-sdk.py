@@ -8,8 +8,11 @@ import zipfile
 
 
 def digest(path):
+    checksum = hashlib.sha256()
     with path.open("rb") as source:
-        return hashlib.file_digest(source, "sha256").hexdigest()
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            checksum.update(block)
+    return checksum.hexdigest()
 
 
 parser = argparse.ArgumentParser(description=__doc__)
