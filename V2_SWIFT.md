@@ -484,209 +484,16 @@ awk 'END { if (NR < 2) exit 1 } $1 != "99186d1dd029a8ba5b66dae390a3aec0d6d0e5293
 shasum -a 256 "$ART_ROOT/strict.xcconfig" "$ART_ROOT/header-hashes.txt" "$ART_ROOT/native.log" "$ART_ROOT/swift.log" > "$ART_ROOT/raw-log-manifest.sha256"
 ```
 
-### Recipe 1B: Supported Published-Input Production Recipe (`2.4.20-km.1`, `proc-macro2-kotlin:0.1.7` & `syn-kotlin:0.4.0` Published; Legitimate Dependency Edges Only)
+### Recipe 1B: Retired km.1 Published-Input Recipe — Historical Evidence Only
 
-> [!WARNING]
-> **All Three Upstream Producer Releases (`2.4.20-km.1`, `proc-macro2-kotlin:0.1.7`, and `syn-kotlin:0.4.0`) Are Published & Independently Verified on Public Maven Central, Adoption Is Restricted to Legitimate Project Dependency & Tool Edges, and This Consolidated Recipe Script Has Static Documentation Review Only:**
-> - **Execution status of this consolidated recipe script:** Recipe 1B below has undergone **static documentation review only** so far and has **not** been executed end-to-end as a standalone consumer script. The tooling release CI proofs (`39590144174`, `39591983416` receipt `6f97378c...`, `39594386832` receipts `ee3ed221...` and `b17aa635...`), the `proc-macro2-kotlin:0.1.7` (`8bd79009...`) and `syn-kotlin:0.4.0` (`450bb790...`) release and consumer proofs, the component/helper proofs (`e1b871c9...`, `e9caac5c...`, `9efd1fd9...`, `791b07cd...`), and the diagnostic/pre-publication consumer proofs (`syn-kotlin` `025a8207...`, `proc-macro2-kotlin` `3f6ca3ee...` and `d3efd67d...`) are separate verified receipts.
+This recipe was statically reviewed but never executed end to end as a standalone consumer script. Its interpreter helper, external scratch paths, and execution instructions are unavailable and have been retired. The immutable coordinates, hashes and original receipt identifiers below are retained as historical evidence; they do not establish current consumer acceptance. Historical receipt links may refer to storage that no longer exists.
+
 > - **Verified Maven Central publications:**
 >   1. `io.github.kotlinmania:swift-export-embeddable:2.4.20-km.1` ([`published-handoff-2.4.20-km.1.json`](file:///Volumes/stuff/Projects/kotlinmania/automation-artifacts/2026-10-21-swift-tooling-release/published-handoff-2.4.20-km.1.json), `SHA256: 1a4499a7b5c2d57517c565c486bdd184b784d526b7c64aace7be8143ad23d363`; tag/source `3687a03e783c3f7215c431dc4600314a64678761`, [release `v2.4.20-km.1`](https://github.com/KotlinMania/kotlin-swift-export-tooling/releases/tag/v2.4.20-km.1), main JAR `e1b871c93dd9556fb7235cd05f70b3c2bc7d32f2cb1b69f1d9161918fd088f3a`, POM `a149229ad82bb239bbe39419948d43b9ab37cb9f6f7e0f9117c762504e841bf8`, helper ZIP `791b07cdd195008ad46f182693e3316747530fcb0b765478cb0201ac23cb2fb2`), resolving all **16 worker components** (`b17aa635...`) without a duplicate official exporter.
 >   2. `io.github.kotlinmania:proc-macro2-kotlin:0.1.7` (`80e3e1a7ce0106f2eca66b4e3893c6dc07e16c4c`, [`verified-handoff.json`](file:///Volumes/stuff/Projects/kotlinmania/automation-artifacts/2026-10-21-proc-macro2-central-0.1.7/verified-handoff.json) `SHA256: 8bd790091d5497cbfefef868cda860a7ceacb6c89ca85fe73606a951d6414519` & [`published-metadata.json`](file:///Volumes/stuff/Projects/kotlinmania/automation-artifacts/2026-10-21-proc-macro2-central-0.1.7/published-metadata.json) `SHA256: 42d74e06d8f2fa98d86fcfa5e9e5568b2d0a205b137de19d56b4af1cfa8c1a36`), selecting `io.github.kotlinmania:proc-macro-kotlin:0.1.4` (`proc-macro-kotlin-android-0.1.4.aar` `864cbedbafdf952aac7737d843468f18771863cd6efc73d6f6ef7d8977a3933d`, `classes.jar` `0aa3fa7422cbe9f17640be4f0ff1c77b770228dc2099fa66c9c6b0a6db02d403`, relocating bundled `ApiStatus` classes under `io/github/kotlinmania/procmacro/vendored`).
 >   3. `io.github.kotlinmania:syn-kotlin:0.4.0` (`94d99bde9aa9c785fb190f2f87e0b7f6b53693a6`, [`verified-handoff.json`](file:///Volumes/stuff/Projects/kotlinmania/automation-artifacts/2026-10-21-syn-release-preparation/proc-macro2-017/publication-v0.4.0/verified-handoff.json) `SHA256: 450bb79064b17a7d5831f9c4ca241323df5db516c0573dc71301a21d1accd0f8`; PR CI `39611272033` `12/12`, exact-`main` CI `39616216695` `12/12`, publication CI `39620970747`).
-> - **Legitimate-dependency-edge & per-project acceptance rules:**
->   1. Downstream repositories may adopt `2.4.20-km.1`, `proc-macro2-kotlin:0.1.7`, and `syn-kotlin:0.4.0` **only where they are legitimate project dependency or tool edges** (never `mavenLocal`, never source substitution, and never inventing a direct source dependency to force a transitive version).
->   2. Producer publication never automatically clears a downstream Kanban card: each repository owner must run its own unchanged behavioral tests under dependency mode `5` (`-warnings-as-errors`), authored consumer mode `6` (`-warnings-as-errors`), and Native bridge `-Werror` (with the generated `PackageTests` runner separately qualified), and remove temporary warning/API workarounds only after coherent published tool + separate SDK helper integration and real unchanged behavioral acceptance pass.
-> - For an authorized repository where legitimate dependency edges are configured:
->   1. `build.gradle.kts` selects the immutable published `io.github.kotlinmania:swift-export-embeddable:2.4.20-km.1` on `swiftExportClasspath` ([§5.1](#supported-gradle-and-classpath-wiring)), configures `tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeLink>().configureEach { val cache = layout.buildDirectory.dir("native-auto-cache/$name"); toolOptions.freeCompilerArgs.add(cache.map { "-Xauto-cache-dir=${it.asFile.absolutePath}" }) }` so cold dependency auto-caches during linking are written under `build/native-auto-cache/<taskName>` rather than `$PREPARED_NATIVE_SDK/klib/cache`, and removes any legacy `GenerateSPMPackage` `doLast` source/manifest rewriter.
->   2. **Pre-execution helper preflight & exact CLI flags (`--source`, `--destination`, `--receipt`):** Freeze the `scripts/prepare_native_sdk.py` source hash (`c5a6f22b55cebaa21eef856cded66210b1dde4bc98ccb69046a2d498c6df1775`) and `patches/KotlinBase.h.patch` hash (`86295c6ad02441d080f8136dc4f5cb8dd0ed33f66aeff9caf271aa2d51f291fe`) **before** running the helper, then invoke `prepare_native_sdk.py --source "$SOURCE_NATIVE_SDK" --destination "$PREPARED_NATIVE_SDK" --receipt "$PREPARED_SDK_RECEIPT"` against a pinned read-only official Kotlin/Native `2.4.20` SDK tree (`SOURCE_NATIVE_SDK`) and freeze `sdk-receipt.sha256` before Gradle starts.
->   3. **External immutable 16-JAR closure manifest & single-project read-only `swiftExportClasspath` audit:** Supply an independently retrieved immutable 16-JAR `(sha256, jar_name)` manifest located **outside** `$EVIDENCE_DIR` (`PUBLISHED_WORKER_CLOSURE_MANIFEST`, matching the 16 resolved worker components in `b17aa63531ff3430e296a335b4b92b6c92b55d93d63068a913270cc9f98176a5`), copy and hash it into `$EVIDENCE_DIR`, and use a read-only `-I verify-classpath.init.gradle` snippet scoped to the exact Swift-exporting Gradle project path (`SWIFT_EXPORT_PROJECT_PATH`, defaulting to `:` and failing if absent or if the receipt file already exists) to verify that the resolved `swiftExportClasspath` files match all 16 entries without mutating task actions or build classpaths.
->   4. **Fail-fast on existing outputs (never auto-delete `build/` or `.build/`):** Verify a clean git working tree first, and **fail immediately without deleting anything** if `$EVIDENCE_DIR`, `$REPO/build`, or `$REPO/src/swift/swift-test-harness/.build` already exists. The repository owner must arrange a fresh owned checkout or move aside retained outputs before running this recipe so existing outputs are never destroyed and can never masquerade as new execution.
->   5. **Nonzero `KotlinBase.h` count & per-file hash guard:** Require at least 2 generated `KotlinBase.h` files (`test "$HEADER_COUNT" -ge 2` and `awk 'END { if (NR < 2) exit 1 } ...'`) and verify that **every** emitted header matches `99186d1dd029a8ba5b66dae390a3aec0d6d0e5293eff641d85daab5e212723c3`.
 
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-# Gate: io.github.kotlinmania:swift-export-embeddable:2.4.20-km.1 (1a4499a7...),
-# io.github.kotlinmania:proc-macro2-kotlin:0.1.7 (8bd79009...), and
-# io.github.kotlinmania:syn-kotlin:0.4.0 (450bb790...) are published on Maven Central.
-# Require explicit owner opt-in ("true") after verifying legitimate project dependency edges
-# and a fresh owned checkout/output directory.
-# Note: this consolidated future recipe script has undergone static documentation review only
-# and has not yet been executed end-to-end as a standalone consumer script.
-DOWNSTREAM_CHAIN_GATE_CLEARED="${DOWNSTREAM_CHAIN_GATE_CLEARED:-false}"
-if [ "$DOWNSTREAM_CHAIN_GATE_CLEARED" != "true" ]; then
-  echo "GATED: Set DOWNSTREAM_CHAIN_GATE_CLEARED=true only when running as the authorized repository owner in a fresh owned checkout with legitimate published dependency edges." >&2
-  exit 1
-fi
-
-REPO="/Volumes/stuff/Projects/kotlinmania/<repo>-kotlin"
-SWIFT_EXPORT_PROJECT_PATH="${SWIFT_EXPORT_PROJECT_PATH:-:}"
-EVIDENCE_DIR="/Volumes/stuff/Projects/kotlinmania/automation-artifacts/<date>-<repo>-swift-gate"
-SOURCE_NATIVE_SDK="${SOURCE_NATIVE_SDK:-$HOME/.konan/kotlin-native-prebuilt-macos-aarch64-2.4.20}"
-TOOLING_REPO="/Volumes/stuff/Projects/kotlinmania/kotlin-swift-export-tooling"
-TOOLING_HELPER="$TOOLING_REPO/scripts/prepare_native_sdk.py"
-TOOLING_PATCH="$TOOLING_REPO/patches/KotlinBase.h.patch"
-TOOLING_LOCK="$TOOLING_REPO/inputs.lock.json"
-EXPECTED_HELPER_SHA256="c5a6f22b55cebaa21eef856cded66210b1dde4bc98ccb69046a2d498c6df1775"
-EXPECTED_PATCH_SHA256="86295c6ad02441d080f8136dc4f5cb8dd0ed33f66aeff9caf271aa2d51f291fe"
-PREPARED_NATIVE_SDK="$EVIDENCE_DIR/prepared-native-sdk"
-PREPARED_SDK_RECEIPT="$EVIDENCE_DIR/sdk-helper-receipt.json"
-
-# External immutable 16-JAR closure manifest (must exist OUTSIDE $EVIDENCE_DIR before running;
-# format: "<64-hex-sha256>  <jar-basename>" sorted by basename, including swift-export-embeddable-2.4.20-km.1.jar)
-PUBLISHED_WORKER_CLOSURE_MANIFEST="${PUBLISHED_WORKER_CLOSURE_MANIFEST:-}"
-EXPECTED_EXPORTER_SHA256="${EXPECTED_EXPORTER_SHA256:-e1b871c93dd9556fb7235cd05f70b3c2bc7d32f2cb1b69f1d9161918fd088f3a}"
-EXPECTED_HEADER_SHA256="99186d1dd029a8ba5b66dae390a3aec0d6d0e5293eff641d85daab5e212723c3"
-
-# 1. Verify clean working tree FIRST and refuse to run (never auto-delete) if $EVIDENCE_DIR,
-# $REPO/build, or $REPO/src/swift/swift-test-harness/.build already exists.
-test -d "$REPO"
-if [ -n "$(git -C "$REPO" status --porcelain)" ]; then
-  echo "Repository working tree is dirty; refusing to run." >&2
-  exit 1
-fi
-if [ -e "$EVIDENCE_DIR" ] || [ -e "$REPO/build" ] || [ -e "$REPO/src/swift/swift-test-harness/.build" ]; then
-  echo "Refusing to overwrite or reuse existing $EVIDENCE_DIR, $REPO/build, or $REPO/src/swift/swift-test-harness/.build; arrange a fresh owned checkout/output first." >&2
-  exit 1
-fi
-
-# 2. Preflight external published closure manifest and read-only official SOURCE_NATIVE_SDK before creating $EVIDENCE_DIR
-test -n "$PUBLISHED_WORKER_CLOSURE_MANIFEST"
-test -s "$PUBLISHED_WORKER_CLOSURE_MANIFEST"
-printf '%s\n' "$EXPECTED_EXPORTER_SHA256" | grep -Eq '^[0-9a-f]{64}$'
-test "$(wc -l < "$PUBLISHED_WORKER_CLOSURE_MANIFEST" | tr -d ' ')" -eq 16
-grep -E "^${EXPECTED_EXPORTER_SHA256}  swift-export-embeddable-2\\.4\\.20-km\\.1\\.jar$" "$PUBLISHED_WORKER_CLOSURE_MANIFEST" >/dev/null
-test -d "$SOURCE_NATIVE_SDK"
-test ! -L "$SOURCE_NATIVE_SDK"
-
-mkdir -p "$EVIDENCE_DIR"/{tmp,clang-cache,module-cache,swiftpm/cache,swiftpm/config,swiftpm/security}
-git -C "$REPO" rev-parse HEAD > "$EVIDENCE_DIR/source-head.txt"
-git -C "$REPO" status --porcelain > "$EVIDENCE_DIR/git-status.txt"
-test ! -s "$EVIDENCE_DIR/git-status.txt"
-cp "$PUBLISHED_WORKER_CLOSURE_MANIFEST" "$EVIDENCE_DIR/expected-16-jar-worker-closure.sha256"
-
-# 3. Freeze helper script, patch & lockfile hashes BEFORE running prepare_native_sdk.py (--source, --destination, --receipt)
-HELPER_SHA="$(shasum -a 256 "$TOOLING_HELPER" | awk '{print $1}')"
-PATCH_SHA="$(shasum -a 256 "$TOOLING_PATCH" | awk '{print $1}')"
-test "$HELPER_SHA" = "$EXPECTED_HELPER_SHA256"
-test "$PATCH_SHA" = "$EXPECTED_PATCH_SHA256"
-shasum -a 256 "$TOOLING_HELPER" "$TOOLING_PATCH" "$TOOLING_LOCK" > "$EVIDENCE_DIR/helper-preflight.sha256"
-
-python3 "$TOOLING_HELPER" \
-  --source "$SOURCE_NATIVE_SDK" \
-  --destination "$PREPARED_NATIVE_SDK" \
-  --receipt "$PREPARED_SDK_RECEIPT"
-test -s "$PREPARED_SDK_RECEIPT"
-shasum -a 256 "$PREPARED_SDK_RECEIPT" > "$EVIDENCE_DIR/sdk-receipt.sha256"
-SDK_HEADER_SHA="$(shasum -a 256 "$PREPARED_NATIVE_SDK/konan/swift_export/kotlin_runtime/KotlinBase.h" | awk '{print $1}')"
-test "$SDK_HEADER_SHA" = "$EXPECTED_HEADER_SHA256"
-
-# 4. Write read-only classpath-audit init snippet scoped to the single identified project ($SWIFT_EXPORT_PROJECT_PATH)
-cat > "$EVIDENCE_DIR/verify-classpath.init.gradle" <<'EOF'
-gradle.projectsEvaluated {
-  def targetPath = System.getenv("SWIFT_EXPORT_PROJECT_PATH") ?: ":"
-  def proj = rootProject.findProject(targetPath)
-  if (proj == null) {
-    throw new GradleException("SWIFT_EXPORT_PROJECT_PATH not found: " + targetPath)
-  }
-  def cfg = proj.configurations.findByName("swiftExportClasspath")
-  if (cfg == null) {
-    throw new GradleException("swiftExportClasspath configuration missing on project " + targetPath)
-  }
-  def out = new File(System.getenv("EVIDENCE_DIR"), "resolved-swiftExportClasspath.txt")
-  if (out.exists()) {
-    throw new GradleException("Refusing to overwrite existing " + out.absolutePath)
-  }
-  out.text = cfg.resolve().collect { it.absolutePath }.sort().join("\n") + "\n"
-}
-EOF
-
-# 5. Dependency xcconfig: Swift 5 language mode + Swift/C Werror
-cat > "$EVIDENCE_DIR/strict.xcconfig" <<'EOF'
-SWIFT_VERSION = 5
-SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
-GCC_TREAT_WARNINGS_AS_ERRORS = YES
-EOF
-
-# 6. Build & embed from fresh $REPO/build using prepared project-local Native SDK
-# (Prerequisite in consumer build.gradle.kts per §5.1:
-#  tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinNativeLink>().configureEach {
-#      val cache = layout.buildDirectory.dir("native-auto-cache/$name")
-#      toolOptions.freeCompilerArgs.add(cache.map { "-Xauto-cache-dir=${it.asFile.absolutePath}" })
-#  }
-#  so cold dependency auto-caches during linking write into $REPO/build/native-auto-cache/<task>
-#  and all 40,932 prepared SDK input files in $PREPARED_NATIVE_SDK remain unchanged.)
-(
-  cd "$REPO"
-  EVIDENCE_DIR="$EVIDENCE_DIR" \
-  SWIFT_EXPORT_PROJECT_PATH="$SWIFT_EXPORT_PROJECT_PATH" \
-  TMPDIR="$EVIDENCE_DIR/tmp/" \
-  CLANG_MODULE_CACHE_PATH="$EVIDENCE_DIR/clang-cache" \
-  SWIFT_MODULECACHE_PATH="$EVIDENCE_DIR/module-cache" \
-  SWIFTPM_MODULECACHE_OVERRIDE="$EVIDENCE_DIR/module-cache" \
-  BUILT_PRODUCTS_DIR="$REPO/build/swift-test" \
-  TARGET_BUILD_DIR="$REPO/build/swift-test" \
-  SDK_NAME="macosx" \
-  CONFIGURATION="Debug" \
-  ARCHS="arm64" \
-  FRAMEWORKS_FOLDER_PATH="Frameworks" \
-  MACOSX_DEPLOYMENT_TARGET="15.0" \
-  DEPLOYMENT_TARGET_SETTING_NAME="MACOSX_DEPLOYMENT_TARGET" \
-  XCODE_XCCONFIG_FILE="$EVIDENCE_DIR/strict.xcconfig" \
-  CI="true" \
-  ./gradlew embedSwiftExportForXcode \
-    --no-daemon --max-workers=2 \
-    --no-configuration-cache --no-build-cache --console=plain \
-    -I "$EVIDENCE_DIR/verify-classpath.init.gradle" \
-    -Pkotlin.native.home="$PREPARED_NATIVE_SDK" \
-    2>&1 | tee "$EVIDENCE_DIR/native.log"
-)
-
-# 7. Verify resolved swiftExportClasspath files match the immutable 16-JAR closure manifest
-test -s "$EVIDENCE_DIR/resolved-swiftExportClasspath.txt"
-while IFS= read -r jar_path; do
-  printf '%s  %s\n' "$(shasum -a 256 "$jar_path" | awk '{print $1}')" "$(basename "$jar_path")"
-done < "$EVIDENCE_DIR/resolved-swiftExportClasspath.txt" | sort -k2,2 > "$EVIDENCE_DIR/actual-16-jar-worker-closure.sha256"
-diff -u "$EVIDENCE_DIR/expected-16-jar-worker-closure.sha256" "$EVIDENCE_DIR/actual-16-jar-worker-closure.sha256"
-
-# 8. Require nonzero generated KotlinBase.h files (>= 2) and verify EVERY header hash matches 99186d1d...
-HEADER_COUNT="$(find "$REPO/build" -type f -name 'KotlinBase.h' | wc -l | tr -d ' ')"
-test "$HEADER_COUNT" -ge 2
-find "$REPO/build" -type f -name 'KotlinBase.h' -exec shasum -a 256 {} + | tee "$EVIDENCE_DIR/header-hashes.txt"
-awk -v expected="$EXPECTED_HEADER_SHA256" 'END { if (NR < 2) exit 1 } $1 != expected { exit 1 }' "$EVIDENCE_DIR/header-hashes.txt"
-
-# 9. Run real Swift 6 consumer tests with isolated scratch-path, warnings-as-errors, and macOS 15.0 target
-(
-  cd "$REPO/src/swift/swift-test-harness"
-  KOTLINMANIA_SWIFT_EXPORT_BUILD="$REPO/build" \
-  TMPDIR="$EVIDENCE_DIR/tmp/" \
-  CLANG_MODULE_CACHE_PATH="$EVIDENCE_DIR/clang-cache" \
-  SWIFT_MODULECACHE_PATH="$EVIDENCE_DIR/module-cache" \
-  SWIFTPM_MODULECACHE_OVERRIDE="$EVIDENCE_DIR/module-cache" \
-  /usr/bin/xcrun swift test -v \
-    --package-path "$REPO/src/swift/swift-test-harness" \
-    --scratch-path "$EVIDENCE_DIR/swift-test-build" \
-    --cache-path "$EVIDENCE_DIR/swiftpm/cache" \
-    --config-path "$EVIDENCE_DIR/swiftpm/config" \
-    --security-path "$EVIDENCE_DIR/swiftpm/security" \
-    --jobs 2 \
-    -Xswiftc -warnings-as-errors \
-    -Xswiftc -target -Xswiftc arm64-apple-macosx15.0 \
-    2>&1 | tee "$EVIDENCE_DIR/swift.log"
-)
-
-# 10. Record raw log manifest
-shasum -a 256 \
-  "$EVIDENCE_DIR/source-head.txt" \
-  "$EVIDENCE_DIR/helper-preflight.sha256" \
-  "$EVIDENCE_DIR/sdk-receipt.sha256" \
-  "$EVIDENCE_DIR/actual-16-jar-worker-closure.sha256" \
-  "$EVIDENCE_DIR/strict.xcconfig" \
-  "$EVIDENCE_DIR/header-hashes.txt" \
-  "$EVIDENCE_DIR/native.log" \
-  "$EVIDENCE_DIR/swift.log" > "$EVIDENCE_DIR/raw-log-manifest.sha256"
-```
+Current builds use the repository-owned Java helpers through Gradle. Follow the project's configured Swift tooling tasks and the [current producer usage](../kotlin-swift-export-tooling/README.md) and [Java migration validation](../kotlin-swift-export-tooling/verification/JAVA_MIGRATION.md). Keep outputs under the owning repository's `build/`, retain its configured immutable release pins, and run its actual unchanged Native and Swift behavior checks. A Java helper check or producer reproduction does not establish downstream runtime acceptance.
 
 ### Recipe 2: Auditing Effective Frontend Flags & Executed Test Counts from `swift.log`
 
@@ -775,7 +582,7 @@ Read-only audit receipt: [`audit.json`](file:///Volumes/stuff/Projects/kotlinman
 
 | Audited Dimension | Exact Observed State & Evidence |
 | :--- | :--- |
-| **Daemon Log & SwiftPM Build Description** | `/Users/sydney/.gradle/daemon/9.8.0/daemon-15916.out.log` (`SHA256: d80b660f0eb3f881db3ea309580c4e8e3b5b42b63496d7bd6907e538be308a3c`)<br>`src/swift/swift-test-harness/.build/arm64-apple-macosx/debug/description.json` (`SHA256: 7e52d4cf2a53c9a83e526757c585ce341e511dd4a286466b8eb2be9786ef3849`) |
+| **Daemon Log & SwiftPM Build Description** | `/Users/sydney/.gradle/daemon/9.8.0/daemon-15916.out.log` (`SHA256: d80b660f0eb3f881db3ea309580c4e8e3b5b42b63496d7bd6907e538be308a3c`)<br>`src/swift/swift-test-harness` (`SHA256: 7e52d4cf2a53c9a83e526757c585ce341e511dd4a286466b8eb2be9786ef3849`) |
 | **Dependency Swift Frontends (`daemon-15916.out.log:1280-1440`)** | **16 frontend invocations across 8 generated dependency modules** (`ExportedKotlinPackages`, `IoGithubKotlinmaniaRamaCoreKotlin`, `IoGithubKotlinmaniaRamaNetKotlin`, `KotlinCoroutineSupport`, `KotlinRuntimeSupport`, `KotlinStdlib`, `OrgJetbrainsKotlinxKotlinxSerializationCore`, `RamaTlsRustls`) compiled in explicit **Swift 5** (`-swift-version 5`) with **NO `-warnings-as-errors`** (`Werror: false`). |
 | **Consumer Test & Runner Frontends (`daemon-15916.out.log:1579-1585`)** | Authored `SwiftTestHarnessTests` (`:1579-1580`) compiled in explicit **Swift 6** (`-swift-version 6`) with **NO `-warnings-as-errors`** (`Werror: false`). Generated `SwiftTestHarnessPackageTests` runner (`:1584-1585`) compiled with **no explicit language-version flag** and **NO `-warnings-as-errors`**. |
 | **Executed Swift Behavioral Cases (`daemon-15916.out.log:1608-1614`)** | **5/5 named Swift tests executed and passed** (`testServerName()`, `testNoServerCertVerifierCompanion()`, `testRamaTlsRustlsCrateMarker()`, `testNoServerCertVerifier()`, `testUnixTime()` $\to$ `Test run with 5 tests in 1 suite passed`). This is a **real 5/5 behavioral pass**, **NOT** an all-module Swift 6 or strict `-warnings-as-errors` pass. |

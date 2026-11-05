@@ -1,4 +1,4 @@
-// port-lint: source aserror.rs
+// port-lint: source src/aserror.rs
 package io.github.kotlinmania.thiserror
 
 /**

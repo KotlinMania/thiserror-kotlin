@@ -1,4 +1,4 @@
-// port-lint: tests tests/test_display.rs
+// port-lint: source tests/test_display.rs
 package io.github.kotlinmania.thiserror
 
 import kotlin.test.Test

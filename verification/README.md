@@ -11,39 +11,41 @@ reviewed public signature dependencies in a catalog bundle selected by the optio
 `project.dependencies.commonMainApiBundle` property. Existing platform-specific
 source sets and direct `api(...)` declarations remain valid.
 
-Before `verifyAndroidPublication`, set these normal Gradle properties:
+`androidPublicationBundle` stages the existing root and Android publications into
+`build/verification/android-publication.zip`. It produces an artifact; publication
+acceptance is now an explicit standalone command:
 
-- `project.publication.android.publicClasses`: comma-separated internal `.class`
-  paths for actual public API, for example `io/github/example/EntryPoint.class`.
-- `project.publication.android.apiDependencies`: comma-separated triples
-  `group:root-module:actual-Android-POM-module`. Use the published POM module;
-  some external KMP libraries legitimately select JVM artifacts.
+```sh
+../tools/java-build-tool.sh AndroidPublicationVerifier build/verification/android-publication.zip \
+  --group io.github.example --module example --version ACTUAL_VERSION \
+  --public-class io/github/example/EntryPoint.class \
+  --receipt build/reports/publication/android.json
+```
 
-The empty template has no project API. Its acceptance contract intentionally
-requires a real project class rather than accepting an empty or unrelated JAR.
-The task stages the existing root and Android publications, then checks root
-redirects, owning-root component URLs, both Android AAR variants, payload hashes,
-manifest, public bytecode and POM packaging/compile dependencies. It does not
-claim consumer resolution or device/native runtime coverage. Upload depends on
-this task. The existing Android and publish-dry-run workflows invoke it too.
+Supply actual coordinates and public JVM class paths. Repeat
+`--api-dependency group:root-module:Android-POM-module` for public signature edges. The
+optional `--profile async-trait` is a project fixture contract, not a template
+default. Metadata, bytecode and hashes do not prove consumer/runtime behavior.
+Neither publication nor the Android workflow automatically invokes this verifier.
+The Android and publish-dry-run workflows only request the bundle producer.
+
+See [standalone tool inventory and commands](../../tools/build-automation/STANDALONE_TOOLS.md)
+for publication pins, JNI/native artifacts, runtime evidence and project fixtures.
 
 ## Focused synchronization
 
-Use Python 3.11+ for standard-library TOML parsing. The workspace launcher
+Use JDK 21 or newer. The standalone launcher compiles Java directly using already installed Gradle JSON/TOML/archive libraries; it does not run Gradle. The workspace launcher
 `tools/sync_template.sh` routes to this implementation; its reviewable source is
 `verification/workspace-sync-template.sh` (install location: workspace `tools/`).
-Never run the historical generic `sweep_template_diff.py --fix` to apply this
-repair: it carries unrelated stale pins. Its `--actions-only` path already
-handles hidden `.github` YAML and YML; this sync inventories both extensions but
-changes no workflows or pins in destination projects.
+The Java workspace diagnostic is available through `tools/shared-build-sync/run.sh diagnose`. Generic replacement remains disabled. The Android planner inventories hidden YAML and YML files and changes no destination workflows or pins.
 
 Example read-only plan from the shared workspace:
 
 ```sh
-KOTLINMANIA_PYTHON=/opt/homebrew/bin/python3 tools/sync_template.sh \
+tools/sync_template.sh \
   --repo /Volumes/stuff/Projects/kotlinmania/quote-kotlin \
   --api-alias libs.proc.macro2.kotlin \
-  --plan automation-artifacts/<card>/plan.json
+  --plan tools/shared-build-sync/plan.json
 ```
 
 Name one existing checkout and, for a plain multi-project build, an explicit
@@ -57,9 +59,9 @@ Application requires a clean feature branch and a current ownership grant JSON
 containing exact `repo`, `head`, `owner`, and `source_write_granted: true`:
 
 ```sh
-KOTLINMANIA_PYTHON=/opt/homebrew/bin/python3 tools/sync_template.sh \
-  --apply-plan automation-artifacts/<card>/plan.json \
-  --grant automation-artifacts/<card>/source-grant.json
+tools/sync_template.sh \
+  --apply-plan tools/shared-build-sync/plan.json \
+  --grant tools/shared-build-sync/source-grant.json
 ```
 
 The grant must come from the coordinator after checking held projects. A source
@@ -93,13 +95,19 @@ After an explicit local build allocation, use the existing shared wrapper:
 The caller must supply the existing SDK location and allocated Gradle/cache paths;
 the fixture does not install an SDK or modify producer checkouts. Three named
 host tests must actually execute and pass. Selection receipts require both roots
-to select Android AARs. Raw compile and runtime AARs/JARs are scanned independently for duplicate
-bytecode; configurations are never unioned. Checks run after host tests and finalize
-executed host tests so a failed test cannot hide duplicate diagnostics. Nested AAR `libs/*.jar` payloads are included; no exclusions hide producer defects.
+to select Android AARs. Raw compile/runtime paths are recorded after host tests,
+including when an executed test fails. Invoke `AndroidClasspathVerifier` with that
+`raw-classpaths.json`, `--configurations` and an explicit `--receipt` separately.
+It checks each configuration independently, including nested AAR `libs/*.jar`.
+The fixture no longer runs that check automatically.
 An unexpected Android configuration/artifact layout fails for review. These host
 tests do not replace Android device, Android Native, Linux ARM64, or Swift gates.
 
-## Validation status
+## Historical validation status
+
+The following records predate standalone extraction and are not a new execution
+claim. The current template has no discoverable Git repository at its path.
+Current extraction validation is reported separately.
 
 The initial verifier passed eight tests against Async Trait's existing verified
 0.1.3 staging ZIP. Ten sync/classpath tests passed; a later conditional-override
@@ -116,33 +124,34 @@ repair checks configurations independently and schedules diagnostics after tests
 its targeted regression passes. The repaired fixture has not executed in Gradle.
 The slot was explicitly returned with terminal/daemon shutdown evidence for Anyhow;
 no immediate retry was performed. New Gradle execution requires fresh allocation.
-The template remains a local Git checkout without a remote; no remote was invented.
+The earlier run described a local Git checkout without a remote; no remote was invented.
 A tested source commit is distinct from tested propagation, exact-final CI, and
 verified Maven publication. Those gates must complete before any rollout/release.
 
 
 The complete target/runner contract and existing CI gaps are recorded in
-[ALL_TARGET_VALIDATION.md](ALL_TARGET_VALIDATION.md). Strict Swift source policy
-regressions are Python tests only; they do not demonstrate compilation or runtime
-execution. Warning relaxations are rejected by the scoped sync before any write.
+[ALL_TARGET_VALIDATION.md](ALL_TARGET_VALIDATION.md). Warning relaxations are rejected by the scoped sync before any write.
 
 
 ## Shared Swift known-problem scan
 
-`scan_swift.py` and `swift-known-problems.json` provide a read-only, versioned
+`SwiftProblemScanner.java` and `swift-known-problems.json` provide a read-only, versioned
 scan of the existing build, workflows (both `.yml` and `.yaml`), manifests,
 consumer tests and generated bridge/runtime output. Run the central template
 copy against one existing project; no source synchronization or build occurs:
 
 ```sh
-python3 template/verification/scan_swift.py --root libc-kotlin \
-  --generated-root libc-kotlin/build/SPMPackage/macosArm64/Debug \
-  --bridge-root libc-kotlin/build/SwiftExport/macosArm64/Debug \
-  --output automation-artifacts/<card>/swift-scan.json
+./tools/java-build-tool.sh SwiftProblemScanner \
+  --root "$PWD/libc-kotlin" \
+  --generated-root "$PWD/libc-kotlin/build/SPMPackage/macosArm64/Debug" \
+  --bridge-root "$PWD/libc-kotlin/build/SwiftExport/macosArm64/Debug" \
+  --output "$PWD/template/build/reports/swift-scan.json"
 ```
 
-Paths above are workspace-relative. A new project generated from this template
-can run its own `verification/scan_swift.py --root .`. Do not blanket-copy build
+Paths above are workspace-relative. Invoke the workspace launcher with an explicit
+`--root` for a project generated from this template; `runBuildTool` is no longer a
+buildSrc task. The scanner's Swift 6 manifest policy still needs review for generated
+Swift 5 dependency packages. Do not blanket-copy build
 scripts or apply isolated compiler patches to satisfy the scan. Each finding has
 a stable rule ID, severity, canonical `SWIFT.md` recipe reference and next action.
 The registry records warning overrides, weaker Swift language modes, generated
@@ -168,8 +177,7 @@ scanner until replaced with real project behavior. Current real full Libc CI
 KotlinRuntimeSupport: implementation-only import without library evolution and
 non-Sendable KotlinBase storage in KotlinError. Swift consumer execution was zero.
 The isolated enum/cancellation/runtime candidates remain gated; no fleet adoption
-is implied. Six Python policy/evidence-reader unit tests exercise the scanner;
-those are not Swift compiler or library runtime tests.
+is implied.
 
 
 ## Android publication host routing
@@ -199,21 +207,16 @@ project workflows: existing publication overrides and workflow specialization re
 review and a matching host route before propagation. The default template's Mac/Android
 workflow route is source-only until its actual Gradle task graph, transported root
 metadata and independent Android consumer have been executed at the same source head.
-`test_android_host_route.py` protects these source edges; its Python passes are not
-Gradle, Kotlin, Swift or library runtime test passes. Linux ARM64 runtime routing is a
-separate concern and is not repaired by changing publication prerequisites.
+Linux ARM64 runtime routing is a separate concern and is not repaired by changing
+publication prerequisites.
 
 
 ## Rust workspace and behavior parity
 
-Run the existing declaration scanner with an installed Python 3.11+ interpreter:
+Run the declaration scanner through the Java build tools (Java 21):
 
 ```sh
-python3 -B template/verification/scan_rust_parity.py \
-  --manifest-index automation-artifacts/<card>/manifest-index.json \
-  --kotlin-root libc-kotlin \
-  --mapping automation-artifacts/<card>/mapping.json \
-  --output automation-artifacts/<card>/cargo-parity.json --strict
+tools/java-build-tool.sh RustParityScanner --manifest-index tools/shared-build-sync/manifest-index.json --kotlin-root libc-kotlin --mapping tools/shared-build-sync/mapping.json --output tools/shared-build-sync/cargo-parity.json --strict
 ```
 
 The index pins the upstream repository and 40-character revision. Each manifest
@@ -269,17 +272,14 @@ exercise parsing and evidence integrity; they are not library runtime tests.
 ## Linux Native wrapper identity
 
 The template compiles Linux C wrappers for the requested Native target and its
-sysroot on both Linux and macOS hosts. Before cinterop consumes an archive,
-`verify_native_archive.py` reads its actual ELF relocatable members and rejects
-x64/ARM64 mismatches, malformed archives and a compiled object absent from the
-archive. It writes `native-archive-verification.json` beside the target archive.
+sysroot on both Linux and macOS hosts. Archive inspection is now an explicit
+`tools/java-build-tool.sh NativeArchiveVerifier ARCHIVE --target linux_arm64
+--report REPORT` command. It checks actual ELF relocatable members, architecture
+and archive structure; optional `--object OBJECT` also requires that object digest.
+It writes only the requested report and is no longer called by wrapper compilation.
 
-`test_linux_wrapper_target.py` covers the host command and guard wiring.
-`test_verify_native_archive.py --archive /path/to/existing/linux-x64-wrapper.a`
-exercises the byte-level guard against a real existing archive. These Python
-regressions are separate from Native compilation, final linking and runtime
-acceptance. Libc's representative ARM64 cross-link is recorded under workspace
-`automation-artifacts/2026-10-20-template-aar-sync/libc-directory-repair/linux-arm64-repair/diagnostic-2/`;
+Libc's representative ARM64 cross-link is recorded under workspace
+`template/build/reports/java-native-verifiers/`;
 it does not establish Linux ARM64 runtime behavior or a template build pass.
 
 The focused Android sync does not rewrite Native wrapper blocks or install this
@@ -305,8 +305,6 @@ use the helper's returned directory, which can be either the registered compiler
 input or the private extraction, while retaining target/sysroot and architecture
 checks.
 
-`test_native_dependency_cache.py` and `test_linux_wrapper_target.py` exercise source
-policy regressions. They do not compile or execute a target. The shared helper
-matches Libc PR135's tested implementation; exact-head compiler/link/runtime
+The shared helper matches Libc PR135's tested implementation; exact-head compiler/link/runtime
 receipts remain necessary for each project and target. The focused Android sync
 route does not rewrite existing FFI specialization or apply this change to a fleet.

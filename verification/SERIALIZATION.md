@@ -13,7 +13,7 @@ all relevant workspace member manifests. Resolve workspace-inherited dependencie
 renamed packages, optional/default features, target conditions, and normal/build/dev
 scopes. Record exact upstream revision, manifest hashes, selected features and the
 Kotlin source sets, public API and tests that need each dependency. Use the existing
-`verification/scan_rust_parity.py` manifest-index/mapping workflow to inventory this
+`verification/RustParityScanner.java` manifest-index/mapping workflow to inventory this
 contract; its declaration report does not establish resolved or behavioral parity.
 
 | Upstream dependency | Kotlin sibling to inspect and verify |
@@ -45,14 +45,3 @@ for any API/ABI changes. Use RUST_CALLERS.md to identify affected callers. Keep
 required functionality until that migration is tested; do not hide or delete APIs
 or weaken warnings/tests to bypass it. Shared template synchronization must preserve
 explicit project choices and never perform a blanket Kotlinx-to-Serde replacement.
-
-Run the focused default-policy and safe-sync regressions with:
-
-```sh
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s verification \
-  -p test_serialization_defaults.py -v
-```
-
-These are template policy and preservation tests. Actual dependency resolution,
-producer compilation, per-target runtime behavior and published consumer acceptance
-require their own execution evidence.

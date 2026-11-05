@@ -89,7 +89,7 @@ proven end-to-end with a working `swift test` invocation against the
        generated from the upstream Kotlin source, plus four
        `.swiftmodule/` bundles named `<Module>`, `KotlinRuntimeSupport`,
        `ExportedKotlinPackages`, and `KotlinRuntime`.
-     - Changes directory into `src/swift/swift-test-harness/` and runs
+     - Changes directory into `src/swift/swift-test-harness` and runs
        `swift test`, which compiles and runs the smoke test against
        the just-produced Swift module.
      - Uploads the static archive, swiftmodule bundles, and the full
@@ -102,13 +102,13 @@ proven end-to-end with a working `swift test` invocation against the
    the same `permissions: contents: read` ceiling. This makes the
    `swift.yml` workflow run as part of the regular CI orchestration.
 
-4. **`src/swift/swift-test-harness/`** — a new top-level directory containing:
+4. **`src/swift/swift-test-harness/`** — the Swift package directory containing:
      - `Package.swift` — a Swift Package Manager package depending on
        the Kotlin-generated SPM at
-       `../build/SPMPackage/macosArm64/Debug` with one `testTarget`
+       `../../../build/SPMPackage/macosArm64/Debug` with one `testTarget`
        (`SwiftTestHarnessTests`). The testTarget carries a
        `linkerSettings` block with
-       `unsafeFlags(["-L", "../build/swift-test", "-l<Module>"])` so
+       `unsafeFlags(["-L", "../../../build/swift-test", "-l<Module>"])` so
        that `swift test` (run outside an `xcodebuild`-driven
        invocation) can resolve the `__root____*` and KotlinError
        symbols from the static archive that `embedSwiftExportForXcode`
@@ -170,6 +170,95 @@ Emission alone does not prove that an API satisfies the documented contract.
 For diagnostic APIs, follow
 [the concrete SynError repair and verification rules](#diagnostic-apis-repair-the-exported-types-not-their-aliases)
 below. A new name alone does not remove inherited or erased Kotlin APIs.
+
+### Serde case: dependency reachability and generic receiver warnings (2026-11-03)
+
+The Serde QA pass separates a corrected export surface from an unresolved
+bridge-generation problem. Apply the dependency and API checks below before
+copying a remedy from another project. The crate source in `tmp/` establishes
+the port's operations and visibility; Kotlin release numbers are independent
+of Rust crate versions.
+
+1. **Export dependencies that occur in the public contract.** Serde's public
+   derive entry points return ProcMacro2 `TokenStream`, so ProcMacro2 belongs
+   on its `commonMain` API dependency edge and in its explicit Swift exports.
+   Syn and Quote remain implementation dependencies: the inspected
+   `serde_derive` module declarations do not publicly reexport their helpers.
+   Keeping those helpers internal and removing the unnecessary Syn/Quote
+   Swift export requests eliminated Serde's generated
+   `removedDueToConflicts` references. That identifier comes from the
+   exporter's `ModuleTranslationKt`; it is not a Rust API to implement with
+   an alias, invented type or stub. This fixes Serde's dependency exposure;
+   it does not establish acceptance of Syn's own generated bindings.
+
+2. **Audit the whole Rust export chain and existing Kotlin callers.** A
+   `priv` package or `mod private` declaration alone does not prove an item
+   is crate-private. `serde_core/build.rs` generates a hidden public
+   `__private$$` module that reexports `crate::private::*`, including
+   `size_hint`. Preserve those operations and the existing layout/FFI
+   evidence. Before narrowing implementation visibility, check public
+   signatures, inherited members and workspace callers. In this pass,
+   Serde's public derive operations and the `RenameRule` API used by
+   rust-kotlin were retained.
+
+3. **Check individual warning controls as well as `-Werror`.** An inherited
+   `compileSwiftExportMain*` configuration added
+   `-Xwarning-level=UNCHECKED_CAST:disabled`. Remove that override: setting
+   `allWarningsAsErrors=true` while disabling the relevant warning is not
+   strict bridge validation. Do not replace it with generated-file edits,
+   suppressions or hidden public declarations. At this audit the override
+   still exists in `template/build.gradle.kts`; it was removed from Serde
+   only. That shared template-code mismatch remains outstanding.
+   Ren's historical Syn card
+   `t_d1e1e172` used `List` constructor inputs with private mutable backing;
+   that is evidence for that specific repair, not permission to remove
+   another API's mutation or alias-identity semantics.
+
+4. **Preserve genuine generic operations when classifying the remainder.**
+   With Kotlin `2.4.21` and exporter `2.4.20-km.4` (worker SHA256
+   `4240be980f3a94bbb250bcf34d73a9b9585d73296edf09fe42bdf494377b0310`),
+   Serde still emitted 241 unchecked casts: 220 in `Serde.kt` and 21 in
+   `KotlinStdlib.kt`. The selected `AsObject` and `AsExistential` receiver
+   renderers are byte-identical to the official exporter and reconstruct
+   parameterized types from opaque handles. `Serializer`, `Visitor`,
+   collection serialization traits and value deserializers are public in
+   `tmp/`; hiding them is not a repair. The additional deprecated-call
+   warning invokes the genuinely exported, deprecated
+   `serde_if_integer128` operation. Do not delete that operation or its
+   deprecation metadata. Concrete outcomes help known-result boundaries,
+   but do not prove that retained generic protocols are correctly bridged.
+   Follow [the compatibility and typed-operation rules](V2_SWIFT.md#kotlin-vs-swift-defect-taxonomy)
+   before any specialization or signature migration; independent
+   `Any`/star captures do not preserve shared input and mutation contracts.
+
+5. **Reuse the existing producer and consumer evidence.** On the KotlinMania
+   board accessed through Hermes's Ren profile, `t_6c4d8c88` already tracks
+   the related generic receiver/constructor family; comment 1981 includes
+   the unconstrained Rama HTTP Backend receiver case. `t_e564f14a` records
+   the related OnceCell typed-operation problem. Keep Serde's case with
+   that existing producer ownership instead of starting another writer.
+   `t_ff493625` is the existing Serde dependency/release tracker, while
+   `t_9586d46a` and the runtime/header cards cover separate failures.
+   Historical card completion, a classpath repair, or fixture passes do
+   not establish current Serde acceptance or authorize publication.
+
+**Verified scope:** the corrected Serde working tree (base HEAD
+`5f22fd414043522d0097fae3908b6c655f3001fc` plus the retained uncommitted
+fixes) passed Detekt, ktlint and 4,798 host test executions across 11 test
+tasks, with zero failures, errors or skips. The complete build exited 1 at
+`compileSwiftExportMainKotlinMacosArm64`, surfaced by
+`swiftExportSmokeTest`. Swift behavioral execution remained zero; Release
+Swift acceptance, new local Maven artifacts and artifact-consumer validation
+were not run. Do not describe the full build or Swift contract as passing.
+No remote publication or CI dispatch was performed by this QA pass.
+
+Local evidence is retained in the QA task directory
+`/Users/sydney/Documents/Codex/2026-11-03/task-7`:
+`template-upgrade-serde-kotlin-build-05-execution.json`,
+`retained-serde-source-fixes-20261104/build-05/manifest.json`,
+`serde-swift-followup-20261104/diagnosis.json`, and
+`serde-swift-kanban-review-20261104.json`. The receipts distinguish source
+checks, actual runtime counts, failed generated bridges and unrun stages.
 
 ---
 
@@ -377,7 +466,7 @@ at once:
    Kotlin plugin emits Swift source files for the SPM package but
    does not declare `lib<Module>.a` as a binary target or expose its
    link path. `src/swift/swift-test-harness/Package.swift` compensates with
-   `unsafeFlags(["-L", "../build/swift-test", "-l<Module>"])`.
+   `unsafeFlags(["-L", "../../../build/swift-test", "-l<Module>"])`.
 2. **`BuildSPMSwiftExportPackage` validates
    `deploymentTargetSettingName` as a non-optional input** but
    provides no default. Outside Xcode the env var
@@ -427,8 +516,8 @@ Then stop. A human will pick it up.
 ## Known upstream gaps
 
 1. **Kotlin-plugin-generated `Package.swift` doesn't reference its
-   static archive.** Workaround in `src/swift/swift-test-harness/Package.swift`:
-   `unsafeFlags(["-L", "../build/swift-test", "-l<Module>"])`.
+   static archive.** Workaround in `src/swift/swift-test-harness`:
+   `unsafeFlags(["-L", "../../../build/swift-test", "-l<Module>"])`.
 
 2. **`BuildSPMSwiftExportPackage.deploymentTargetSettingName` has no
    default.** Workaround in `.github/workflows/swift.yml`:
@@ -489,7 +578,7 @@ Then stop. A human will pick it up.
 
 5. **Swift accesses Kotlin companion objects as `Type.Companion.shared.member`**,
    not `Type.companion.member`. Common gotcha when writing the smoke
-   test in `src/swift/swift-test-harness/`. The Swift binding generated by the
+   test in `src/swift/swift-test-harness`. The Swift binding generated by the
    plugin uses a capital `Companion` struct type with a `shared`
    singleton accessor, not a lowercase `companion` property.
 
@@ -786,7 +875,7 @@ become deletable.
    }
    ```
 
-   Also give `src/swift/swift-test-harness/Package.swift` the same
+   Also give `src/swift/swift-test-harness` the same
    `platforms: [.macOS(.v14)]`. If a prior failed run cached a bad
    manifest, clear `src/swift/swift-test-harness/.build` once.
 
@@ -2034,8 +2123,8 @@ internal fun `null`(): UnsafeRawIsolatePtr = nullValue()
 **Evidence.** Discovered and independently verified in `v8-kotlin` ([PR #121](https://github.com/KotlinMania/v8-kotlin/pull/121), merged to `main` at `4be04116172bd955580511da3ab264eb69797c00`; retained step logs in `/Users/sydney/.gemini/antigravity/brain/035cfd35-895c-497a-927a-3af4da50a6b1/.system_generated/steps/`):
 - **Retained bridge snippet & compiler failure (Step `1878` & [`steps/1874/output.txt`](file:///Users/sydney/.gemini/antigravity/brain/035cfd35-895c-497a-927a-3af4da50a6b1/.system_generated/steps/1874/output.txt), `SHA256: e197fb6d905f6d523b6d18145c57fa9ad519f200d5566aa04c61c565c0f8d22c`):** Generated `V8.kt:12310-12315` emitted `val _result = run { __self.null() }`, failing `compileSwiftExportMainKotlinMacosArm64` at `V8.kt:12313:19` (`Cannot infer type for type parameter 'R'`) and `V8.kt:12313:32` (`Reference has a nullable type 'Nothing?'` / `No receiver can be passed to this function or property`).
 - **Source locations:**
-  - `src/common/commonMain/kotlin/io/github/kotlinmania/v8/Isolate.kt` lines `83, 85`: `` internal fun `null`(): UnsafeRawIsolatePtr = nullValue() `` paired with `public fun nullValue(): UnsafeRawIsolatePtr = UnsafeRawIsolatePtr(null)`.
-  - `src/common/commonMain/kotlin/io/github/kotlinmania/v8/Function.kt` lines `127, 129` (`PropertyCallbackArguments`) and lines `179, 181` (`FunctionCallbackArguments`): `` internal fun `this`(): Object = thisValue() `` paired with `public fun thisValue(): Object`.
+  - `src/common/commonMain` lines `83, 85`: `` internal fun `null`(): UnsafeRawIsolatePtr = nullValue() `` paired with `public fun nullValue(): UnsafeRawIsolatePtr = UnsafeRawIsolatePtr(null)`.
+  - `src/common/commonMain` lines `127, 129` (`PropertyCallbackArguments`) and lines `179, 181` (`FunctionCallbackArguments`): `` internal fun `this`(): Object = thisValue() `` paired with `public fun thisValue(): Object`.
 - **Qualification:** This preserves the public operations for Kotlin and Swift consumers via an explicit **project-specific public spelling migration** (`nullValue()` / `thisValue()`); it is **not** a repair of the Swift Export bridge generator itself and must **not** be cited to justify hiding public APIs without a public replacement. The Syn producer owner received the exact regression evidence and recorded backticked-keyword escaping in [`kotlin-swift-export-tooling/verification/UPSTREAM_ISSUES.md`](file:///Volumes/stuff/Projects/kotlinmania/kotlin-swift-export-tooling/verification/UPSTREAM_ISSUES.md) (local documentation only; no external upstream issue was filed).
 
 <a id="16-public-mutablemap--mutableset--mutablelist-properties-trigger-global-ktypewkotlincollectionsmutableset-already-exists-during-static-linking"></a>
@@ -2067,7 +2156,7 @@ genuinely crate-private (`pub(crate)` or private in `tmp/`), scope it to
 
 **Evidence.** Discovered and independently verified in `v8-kotlin` ([PR #121](https://github.com/KotlinMania/v8-kotlin/pull/121), merged to `main` at `4be04116172bd955580511da3ab264eb69797c00`):
 - **Retained failure log ([`steps/1904/output.txt`](file:///Users/sydney/.gemini/antigravity/brain/035cfd35-895c-497a-927a-3af4da50a6b1/.system_generated/steps/1904/output.txt), `SHA256: 4eba8703b0e74c84a6b899d252aa2a2d6e05b3fbb722c9b0ed1334bf8767ceaf`):** `KotlinStdlib.kt:20` (`BindClassToObjCName` on `MutableSet`) + reverse `entries`/`keys` bridges at `KotlinStdlib.kt:341, 351` triggered `Global 'ktypew:kotlin.collections.MutableSet' already exists`.
-- **Upstream Rust parity:** `src/common/commonMain/kotlin/io/github/kotlinmania/v8/Isolate.kt:97` (`internal val slots: MutableMap<String, Any> = mutableMapOf()`) on `class IsolateAnnex internal constructor(...)` corresponds to upstream Rust `tmp/v8/src/isolate.rs:1899` (`pub(crate) struct IsolateAnnex`) and its private field `slots: HashMap<TypeId, RawSlot, BuildTypeIdHasher>` at line `1901`. Making `slots` `internal` is therefore faithful crate-private visibility alignment, **not** hiding a public upstream Rust API.
+- **Upstream Rust parity:** `src/common/commonMain` (`internal val slots: MutableMap<String, Any> = mutableMapOf()`) on `class IsolateAnnex internal constructor(...)` corresponds to upstream Rust `tmp/v8/src/isolate.rs:1899` (`pub(crate) struct IsolateAnnex`) and its private field `slots: HashMap<TypeId, RawSlot, BuildTypeIdHasher>` at line `1901`. Making `slots` `internal` is therefore faithful crate-private visibility alignment, **not** hiding a public upstream Rust API.
 - The Syn producer owner received the exact regression evidence and recorded the `ktypew:kotlin.collections.MutableSet` duplicate-global symbol collision in [`kotlin-swift-export-tooling/verification/UPSTREAM_ISSUES.md`](file:///Volumes/stuff/Projects/kotlinmania/kotlin-swift-export-tooling/verification/UPSTREAM_ISSUES.md) (local documentation only; no external upstream issue was filed).
 - **Build-mode and test-count qualification on `v8-kotlin` (`4be04116172bd955580511da3ab264eb69797c00`):** Passing Step `1942` ([`steps/1942/output.txt`](file:///Users/sydney/.gemini/antigravity/brain/035cfd35-895c-497a-927a-3af4da50a6b1/.system_generated/steps/1942/output.txt), `SHA256: ee9995f8033abadf5fe5ee135617c0207ed80ec7370a6abab75a114871240228`) executed **1 Swift Testing test (`testSwiftModuleLoads`, passed)** exercising real `PropertyAttribute`, `PropertyFilter`, `HandlerFlags`, `MicrotasksPolicy`, and `version` operations (despite XCTest's separate `0` summary). However, retained `.build/arm64-apple-macosx/debug/description.json` (`SHA256: 8928e61883026d1a103582e9c599ba389f804abd5a1f077bea29b814da4c0d92`) and `v8-kotlin/build.gradle.kts` (`lines 370–374, 1389, 1474`) confirm that `v8-kotlin` disabled generated Kotlin bridge `-Werror`, rewrote `swift-tools-version: 6.0` $\to$ `5.9`, and compiled all Swift targets **without `-warnings-as-errors`** (see item 5 at the end of this document).
 
@@ -2766,7 +2855,7 @@ Syn's current delivery reference is clean and pushed at **70d733ae43bfb25c06b745
    - **Repository & commits:** [`https://github.com/KotlinMania/v8-kotlin`](https://github.com/KotlinMania/v8-kotlin), source commit `4be04116172bd955580511da3ab264eb69797c00` ([PR #121](https://github.com/KotlinMania/v8-kotlin/pull/121), merged from `da6fa39` / `7997b92`), followed by merged doc-sync [PR #122](https://github.com/KotlinMania/v8-kotlin/pull/122) (mirroring template commit `51d31a8`, [### 15.](#15-backticked-kotlin-reserved-keywords-on-public-declarations-emit-unbackticked-calls-in-the-swift-export-kotlin-bridge) and [### 16.](#16-public-mutablemap--mutableset--mutablelist-properties-trigger-global-ktypewkotlincollectionsmutableset-already-exists-during-static-linking) above).
    - **Retained failure logs, upstream Rust visibility, and public-spelling verification:**
      1. **Step `1878` & Step `1874` ([`steps/1874/output.txt`](file:///Users/sydney/.gemini/antigravity/brain/035cfd35-895c-497a-927a-3af4da50a6b1/.system_generated/steps/1874/output.txt), `SHA256: e197fb6d905f6d523b6d18145c57fa9ad519f200d5566aa04c61c565c0f8d22c`):** Generated `V8.kt:12310-12315` emitted `val _result = run { __self.null() }`, failing `compileSwiftExportMainKotlinMacosArm64` at `V8.kt:12313:19` (`Cannot infer type for type parameter 'R'`) and `V8.kt:12313:32` (`Reference has a nullable type 'Nothing?'` / `No receiver can be passed to this function or property`). `Isolate.kt:83,85` (`` internal fun `null`() `` + `public fun nullValue()`) and `Function.kt:127,129, 179,181` (`` internal fun `this`() `` + `public fun thisValue()`) preserve the public operations via a **qualified project-specific public spelling migration** (`nullValue()` / `thisValue()`); this is a source workaround for unescaped keyword emission, **not** a generator fix or blanket API-hiding license.
-     2. **Step `1904` ([`steps/1904/output.txt`](file:///Users/sydney/.gemini/antigravity/brain/035cfd35-895c-497a-927a-3af4da50a6b1/.system_generated/steps/1904/output.txt), `SHA256: 4eba8703b0e74c84a6b899d252aa2a2d6e05b3fbb722c9b0ed1334bf8767ceaf`):** `linkSwiftExportBinaryDebugStaticMacosArm64` failed with `Global 'ktypew:kotlin.collections.MutableSet' already exists`, caused by `KotlinStdlib.kt:20` (`@file:BindClassToObjCName(kotlin.collections.MutableSet::class, ...)`) plus reverse `MutableMap.entries`/`keys` bridges at `KotlinStdlib.kt:341, 351`. `src/common/commonMain/kotlin/io/github/kotlinmania/v8/Isolate.kt:97` (`internal val slots: MutableMap<String, Any> = mutableMapOf()`) on `class IsolateAnnex internal constructor(...)` corresponds to upstream Rust `tmp/v8/src/isolate.rs:1899` (`pub(crate) struct IsolateAnnex`) and its private field `slots: HashMap<TypeId, RawSlot, BuildTypeIdHasher>` at line `1901`. Making `slots` `internal` is faithful crate-private visibility alignment, **not** hiding a public upstream API.
+     2. **Step `1904` ([`steps/1904/output.txt`](file:///Users/sydney/.gemini/antigravity/brain/035cfd35-895c-497a-927a-3af4da50a6b1/.system_generated/steps/1904/output.txt), `SHA256: 4eba8703b0e74c84a6b899d252aa2a2d6e05b3fbb722c9b0ed1334bf8767ceaf`):** `linkSwiftExportBinaryDebugStaticMacosArm64` failed with `Global 'ktypew:kotlin.collections.MutableSet' already exists`, caused by `KotlinStdlib.kt:20` (`@file:BindClassToObjCName(kotlin.collections.MutableSet::class, ...)`) plus reverse `MutableMap.entries`/`keys` bridges at `KotlinStdlib.kt:341, 351`. `src/common/commonMain` (`internal val slots: MutableMap<String, Any> = mutableMapOf()`) on `class IsolateAnnex internal constructor(...)` corresponds to upstream Rust `tmp/v8/src/isolate.rs:1899` (`pub(crate) struct IsolateAnnex`) and its private field `slots: HashMap<TypeId, RawSlot, BuildTypeIdHasher>` at line `1901`. Making `slots` `internal` is faithful crate-private visibility alignment, **not** hiding a public upstream API.
      3. The Syn producer owner received the exact regression evidence and recorded both the `ktypew:kotlin.collections.MutableSet` duplicate-global symbol and backticked-keyword escaping into [`kotlin-swift-export-tooling/verification/UPSTREAM_ISSUES.md`](file:///Volumes/stuff/Projects/kotlinmania/kotlin-swift-export-tooling/verification/UPSTREAM_ISSUES.md) (local documentation only; no external upstream bug report was filed).
    - **Effective compiler/mode/warning audit (`description.json` SHA256 `8928e61883026d1a103582e9c599ba389f804abd5a1f077bea29b814da4c0d92`):**
      - No verbose `swift-frontend` command lines were captured in Step `1942`. Retained `.build/arm64-apple-macosx/debug/description.json` under Apple Swift `6.3.3` establishes that generated dependency modules compiled in **Swift 5** language mode, authored `SwiftTestHarnessTests` compiled in **Swift 6** language mode, the generated `SwiftTestHarnessPackageTests` runner compiled with no explicit language-version flag, and **ALL Swift targets compiled WITHOUT `-warnings-as-errors`**.

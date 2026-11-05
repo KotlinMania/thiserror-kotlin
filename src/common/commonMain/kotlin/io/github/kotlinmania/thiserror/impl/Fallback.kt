@@ -6,6 +6,9 @@ import io.github.kotlinmania.quote.quote
 import io.github.kotlinmania.syn.DeriveInput
 import io.github.kotlinmania.syn.SynError
 
+internal fun expand(input: DeriveInput, error: SynError): TokenStream =
+    expandFallback(input, error)
+
 public fun expandFallback(input: DeriveInput, error: SynError): TokenStream {
     val ty = callSiteIdent(input.ident)
     val split = input.generics.splitForImpl()

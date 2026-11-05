@@ -1,4 +1,4 @@
-// port-lint: source provide.rs
+// port-lint: source src/provide.rs
 package io.github.kotlinmania.thiserror
 
 /**

@@ -62,16 +62,11 @@ kotlin.targets.named("android") {
                 }
             }
         }
-        val checkClasspath = tasks.register<Exec>("checkAndroidPublicationClasspath") {
-            dependsOn(writeClasspath)
-            mustRunAfter(hostTests)
-            commandLine("python3", file("../check_android_classpath.py"), classpathReceipt.get().asFile,
-                "--configurations", "--receipt", layout.buildDirectory.file("reports/publication/duplicates.json").get().asFile)
-        }
-        // Keep diagnostics when an executed host test fails; neither result is converted to success.
-        hostTests.configureEach { finalizedBy(checkClasspath) }
+        // Preserve raw dependency evidence even when a host test fails. Duplicate
+        // bytecode inspection is an explicit standalone AndroidClasspathVerifier call.
+        hostTests.configureEach { finalizedBy(writeClasspath) }
         tasks.register("verifyAndroidConsumer") {
-            dependsOn(compileTaskProvider, hostTests, checkClasspath)
+            dependsOn(compileTaskProvider, hostTests, writeClasspath)
             doLast {
                 val selections = mutableListOf<String>()
                 compileDependencies.incoming.resolutionResult.rootComponent.get().dependencies

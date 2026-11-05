@@ -1,4 +1,4 @@
-// port-lint: source impl/src/unraw.rs
+// port-lint: tests impl/src/unraw.rs
 package io.github.kotlinmania.thiserror.impl
 
 import io.github.kotlinmania.procmacro2.Ident

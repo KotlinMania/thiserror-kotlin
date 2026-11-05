@@ -1,5 +1,8 @@
+// port-lint: tests src/var.rs
 package io.github.kotlinmania.thiserror
 
+import io.github.kotlinmania.anyhow.anyhow
+import io.github.kotlinmania.procmacro2.TokenStream
 import io.github.kotlinmania.thiserror.compat.fmt.Alignment
 import io.github.kotlinmania.thiserror.compat.fmt.DebugAsHex
 import io.github.kotlinmania.thiserror.compat.fmt.FmtResult
@@ -8,10 +11,20 @@ import io.github.kotlinmania.thiserror.compat.fmt.FormattingOptions
 import io.github.kotlinmania.thiserror.compat.fmt.Pointer
 import io.github.kotlinmania.thiserror.compat.fmt.Sign
 import io.github.kotlinmania.thiserror.compat.fmt.Write
+import io.github.kotlinmania.thiserror.impl.deriveError
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
+
+internal interface CausedStdError : StdError {
+    val cause: StdError
+
+    override fun source(): StdError = cause
+}
 
 class VarTest {
     @Test
@@ -126,5 +139,55 @@ class VarTest {
         assertFailsWith<IllegalArgumentException> { FormattingOptions(width = -1) }
         assertFailsWith<IllegalArgumentException> { FormattingOptions(precision = 65536) }
         assertEquals(65535, FormattingOptions(width = 65535).width)
+    }
+
+    @Test
+    fun testErrorDefinitions() {
+        val braced = BracedError("error message", 42)
+        assertEquals("error message", braced.msg)
+        assertEquals(42, braced.pos)
+        assertNull(braced.source())
+
+        val tuple = TupleError("tuple message", 1)
+        assertEquals("tuple message", tuple.message)
+        assertEquals(1, tuple.pos)
+        assertNull(tuple.source())
+
+        val unit = UnitError()
+        assertNull(unit.source())
+
+        val withSource = WithSource(unit)
+        assertEquals(unit, withSource.source())
+
+        val anyCause =
+            object : StdError {
+                override fun toString(): String = anyhow("any error").toString()
+            }
+        val withAnyhow = WithAnyhow(anyCause)
+        assertEquals(anyCause, withAnyhow.source())
+
+        val enumBraced = EnumError.Braced(unit)
+        assertEquals(unit, enumBraced.source())
+
+        val enumTuple = EnumError.Tuple(unit)
+        assertEquals(unit, enumTuple.source())
+
+        val enumUnit = EnumError.Unit
+        assertNull(enumUnit.source())
+
+        val sources =
+            listOf(
+                "struct BracedError { msg: String, pos: usize }",
+                "struct TupleError(String, usize);",
+                "struct UnitError;",
+                "struct WithSource { #[source] cause: io::Error }",
+                "struct WithAnyhow { #[source] cause: anyhow::Error }",
+                "enum EnumError { Braced { #[source] cause: io::Error }, Tuple(#[source] io::Error), Unit }",
+            )
+        for (src in sources) {
+            val expanded = deriveError(TokenStream.fromString(src).getOrThrow()).toString()
+            assertFalse(expanded.contains("compile_error"), expanded)
+            assertTrue(expanded.contains("Error for"), expanded)
+        }
     }
 }

@@ -1,4 +1,4 @@
-// port-lint: source display.rs
+// port-lint: source src/display.rs
 package io.github.kotlinmania.thiserror
 
 /**

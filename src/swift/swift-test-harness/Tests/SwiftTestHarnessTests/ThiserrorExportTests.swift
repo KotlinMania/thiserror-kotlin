@@ -1,4 +1,3 @@
-#if canImport(Testing)
 import Testing
 import Thiserror
 
@@ -11,15 +10,4 @@ struct ThiserrorExportTests {
         #expect(fmt(target: target) == "null")
     }
 }
-#elseif canImport(XCTest)
-import XCTest
-import Thiserror
 
-final class ThiserrorExportTests: XCTestCase {
-    func testDisplayTargetFormatting() throws {
-        let target = DisplayTarget(value: nil)
-        XCTAssertEqual(target.displayString(), "null")
-        XCTAssertEqual(fmt(target: target), "null")
-    }
-}
-#endif
