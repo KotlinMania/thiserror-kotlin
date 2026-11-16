@@ -6,7 +6,7 @@
     "lang": "rust"
   },
   "target": {
-    "path": "src/commonMain/kotlin/io/github/kotlinmania/thiserror",
+    "path": "src/common/commonMain/kotlin/io/github/kotlinmania/thiserror",
     "lang": "kotlin"
   },
   "checks": {

@@ -1,0 +1,120 @@
+--- a/tools/sweep_template_diff.py
++++ b/tools/sweep_template_diff.py
+@@ -5,11 +5,11 @@
+ Diffs a KotlinMania repository against /Volumes/stuff/Projects/kotlinmania/template/
+ ignoring files outside of the template directory tree.
+ Identifies deviations, missing folders/files, outdated pinned versions,
+-and can optionally fix them with --fix.
++Generic comparison is read-only. Only --actions-only --fix applies reviewed pin transitions.
+ 
+ Usage:
+     python3 sweep_template_diff.py <repo-path-or-name>
+-    python3 sweep_template_diff.py <repo-path-or-name> --fix
++    python3 sweep_template_diff.py <repo-path-or-name> --actions-only --fix
+     python3 sweep_template_diff.py --all
+ """
+ 
+@@ -32,7 +32,7 @@
+ 
+ def rewrite_action_pins(content):
+     """Change only exact reviewed uses refs, preserving surrounding YAML."""
+-    pattern = r'''(^[ \t]*(?:-[ \t]+)?uses:[ \t]*['"]?)(actions/setup-java|gradle/actions/setup-gradle|actions/setup-node)@(v[0-9.]+)(?=[ \t'"#]|$)'''
++    pattern = r'''(^[ \t]*(?:-[ \t]+)?uses:[ \t]*['"]?)(actions/setup-java|gradle/actions/setup-gradle|actions/setup-node)@(v[0-9.]+)(?=[ \t\r'"#]|$)'''
+     def replace(match):
+         replacement = REVIEWED_ACTION_PINS.get((match[2], match[3]))
+         return match[0] if replacement is None else f"{match[1]}{match[2]}@{replacement}"
+@@ -79,6 +79,8 @@
+     return sorted(template_dirs), sorted(template_files)
+ 
+ def diff_repo(repo_dir, fix=False):
++    if fix:
++        raise ValueError("Generic --fix is disabled: it can overwrite project specialization and validated pins; use an explicit reviewed source plan or --actions-only")
+     repo_name = os.path.basename(os.path.abspath(repo_dir))
+     print(f"\n==================================================")
+     print(f"Checking repo: {repo_name}")
+@@ -139,12 +141,14 @@
+         new_content = content
+         
+         # Check versions only within [versions] section
++        # Report canonical values, never a historical hard-coded pin policy.
++        import tomllib
++        with open(os.path.join(TEMPLATE_DIR, "gradle/libs.versions.toml"), "rb") as handle:
++            template_versions = tomllib.load(handle)["versions"]
+         version_targets = {
+-            r'kotlin\s*=\s*"[^"]+"': 'kotlin = "2.4.20"',
+-            r'androidKmp\s*=\s*"[^"]+"': 'androidKmp = "9.4.1"',
+-            r'kotlinxBenchmark\s*=\s*"[^"]+"': 'kotlinxBenchmark = "0.5.0"',
+-            r'detekt\s*=\s*\{[^\}]+\}': 'detekt = "1.23.8"',
+-            r'ktlint\s*=\s*\{[^\}]+\}': 'ktlint = "14.2.0"',
++            rf'{re.escape(name)}\s*=\s*"[^"]+"': f'{name} = "{template_versions[name]}"'
++            for name in ("kotlin", "androidKmp", "kotlinxBenchmark", "detekt", "ktlint")
++            if isinstance(template_versions.get(name), str)
+         }
+         v_match = re.search(r'(\[versions\]\s*\n)(.*?)(\n\[|\Z)', new_content, re.DOTALL)
+         if v_match:
+@@ -202,10 +206,10 @@
+                     if k in res_keys:
+                         updated_lines.append(res_keys[k])
+                         handled_keys.add(k)
+-                    elif line.startswith("versions.kotlin="):
+-                        updated_lines.append("versions.kotlin=2.4.20")
+-                    elif line.startswith("versions.android.plugin="):
+-                        updated_lines.append("versions.android.plugin=9.4.1")
++                    elif line.startswith(("versions.kotlin=", "versions.android.plugin=")):
++                        key = line.split("=", 1)[0]
++                        updated_lines.append(next((value for value in tmpl_props.splitlines()
++                                                   if value.startswith(key + "=")), line))
+                     else:
+                         updated_lines.append(line)
+                 for k, v in res_keys.items():
+@@ -220,18 +224,14 @@
+     if os.path.exists(workflows_dir):
+         wf_diffs = []
+         for wf in os.listdir(workflows_dir):
+-            if not wf.endswith(".yml"):
++            if not wf.endswith((".yml", ".yaml")):
+                 continue
+             wf_path = os.path.join(workflows_dir, wf)
+             with open(wf_path, "r", encoding="utf-8") as f:
+                 wf_content = f.read()
+-            wf_new = wf_content
+-            # Check setup-java
+-            if "actions/setup-java@v" in wf_new and "actions/setup-java@v6.0.1" not in wf_new:
+-                wf_new = re.sub(r'actions/setup-java@v[0-9.]+', 'actions/setup-java@v6.0.1', wf_new)
+-            # Check codeql-action
+-            if "github/codeql-action" in wf_new and "v4.38.1" not in wf_new:
+-                wf_new = re.sub(r'github/codeql-action/([^@]+)@v[0-9.]+', r'github/codeql-action/\1@v4.38.1', wf_new)
++            # Only the explicit reviewed old-to-new Actions transitions are proposals.
++            # Newer, unknown and SHA references are preserved.
++            wf_new = rewrite_action_pins(wf_content)
+             # Check codeql-java-kotlin.yml --project-dir codeql-build
+             if wf == "codeql-java-kotlin.yml" and "--project-dir codeql-build" not in wf_new:
+                 wf_new = re.sub(r'(\./gradlew(?:\s+--[a-z-]+)*)\s+codeqlCompileJvm', r'\1 --project-dir codeql-build codeqlCompileJvm', wf_new)
+@@ -251,7 +251,7 @@
+         if wf_diffs:
+             print(f"[!] Outdated workflows ({len(wf_diffs)}): {', '.join(wf_diffs)}")
+             if fix:
+-                print("      -> Updated workflow files to setup-java v6.0.1 and codeql-action v4.38.1")
++                print("      -> Applied reviewed Actions/workflow changes")
+ 
+     # 6. Check build.gradle.kts for yarn lock hooks
+     build_gradle = os.path.join(repo_dir, "build.gradle.kts")
+@@ -386,7 +386,7 @@
+ def main():
+     parser = argparse.ArgumentParser(description="Sweep template diff across repositories.")
+     parser.add_argument("repo", nargs="?", help="Specific repository name or path")
+-    parser.add_argument("--fix", action="store_true", help="Automatically apply template fixes")
++    parser.add_argument("--fix", action="store_true", help="Only apply reviewed --actions-only fixes; generic writes are disabled")
+     parser.add_argument("--all", action="store_true", help="Run across all *-kotlin repositories")
+     parser.add_argument("--actions-only", action="store_true", help="Only the three reviewed Actions pin updates in one explicit repository")
+     args = parser.parse_args()
+@@ -399,6 +399,9 @@
+             parser.error("--actions-only requires an existing primary Git checkout")
+         sync_action_pins(repo_path, fix=args.fix)
+         return
++
++    if args.fix:
++        parser.error("Generic --fix is disabled; use a reviewed source plan or one explicit --actions-only repository")
+ 
+     if args.all:
+         repos = [d for d in os.listdir(WORKSPACE) if d.endswith("-kotlin") and os.path.isdir(os.path.join(WORKSPACE, d))]
