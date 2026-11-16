@@ -16,16 +16,16 @@ For every Rust crate this repo owns (under `tmp/`), this file lists every **cros
 
 | package | module | inbound use sites | distinct caller crates | distinct caller repos | codex sites |
 |---|---|---:|---:|---:|---:|
-| `thiserror` | `thiserror` | 93 | 42 | 18 | 30 |
+| `thiserror` | `thiserror` | 97 | 45 | 21 | 30 |
 | `thiserror-impl` | `thiserror_impl` | 0 | 0 | 0 | 0 |
 
 ## `thiserror`
 
-### Inbound symbols (1 distinct, 93 total `use` sites)
+### Inbound symbols (1 distinct, 97 total `use` sites)
 
 Sorted by codex demand, then total demand. The first symbols are the priority queue for porting `thiserror`.
 
-#### `thiserror::Error` — 93 site(s) (30 codex, 63 other, 42 caller crates)
+#### `thiserror::Error` — 97 site(s) (30 codex, 67 other, 45 caller crates)
 
 - ✅ `codex-kotlin/codex-api` `src/error.rs:5` — `use thiserror::Error`
 - ✅ `codex-kotlin/codex-app-server` `src/config_manager_service.rs:34` — `use thiserror::Error`
@@ -39,7 +39,7 @@ Sorted by codex demand, then total demand. The first symbols are the priority qu
 - ✅ `codex-kotlin/codex-config` `src/cloud_requirements.rs:7` — `use thiserror::Error`
 - ✅ `codex-kotlin/codex-config` `src/constraint.rs:5` — `use thiserror::Error`
 - ✅ `codex-kotlin/codex-config` `src/requirements_exec_policy.rs:10` — `use thiserror::Error`
-- _… and 81 more site(s)._
+- _… and 85 more site(s)._
 
 ## `thiserror-impl`
 
